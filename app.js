@@ -744,6 +744,18 @@ document.getElementById("wxSearchBtn").addEventListener("click", async ()=>{
 });
 
 /* ---------------------------------------------------------- 7. TICKER --- */
+// A URL typed without a scheme (e.g. "10.0.0.104:5056/wall.html") isn't just
+// missing "http://" cosmetically — passed straight to fetch()/an iframe src,
+// the browser reads the part before the first colon as the scheme itself
+// ("10.0.0.104:" looks like a scheme named "10.0.0.104"), which is invalid
+// and fails silently, indistinguishable from "server's just unreachable".
+// Normalize on save (and defensively here too, for anything saved before
+// this existed) so that class of bug can't recur.
+function normalizeWallUrl(raw){
+  const s = (raw||"").trim();
+  if(!s) return s;
+  return /^https?:\/\//i.test(s) ? s : "http://" + s;
+}
 async function reachable(url, timeoutMs=2500){
   try{
     const ctrl = new AbortController();
@@ -755,7 +767,7 @@ async function reachable(url, timeoutMs=2500){
 }
 async function renderTicker(){
   const host = document.getElementById("tickerHost");
-  const url = CFG.wallUrl.trim();
+  const url = normalizeWallUrl(CFG.wallUrl);
   if(!url){
     host.innerHTML = `<div class="ticker-off"><div class="big">📈</div><div>No ticker wall URL set.</div><div class="hint">Add your trading app's network address in Settings.</div></div>`;
     return;
@@ -1058,7 +1070,7 @@ document.getElementById("settingsSave").addEventListener("click", async ()=>{
   CFG.keywords.photo = document.getElementById("kwPhoto").value;
   CFG.keywords.doctor = document.getElementById("kwDoctor").value;
   CFG.keywords.friends = document.getElementById("kwFriends").value;
-  CFG.wallUrl = document.getElementById("setWallUrl").value.trim();
+  CFG.wallUrl = normalizeWallUrl(document.getElementById("setWallUrl").value.trim());
   CFG.firebase = {
     apiKey: document.getElementById("fbApiKey").value.trim(),
     authDomain: document.getElementById("fbAuthDomain").value.trim(),
