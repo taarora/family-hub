@@ -1101,6 +1101,14 @@ function wireCheckboxes(root){
 let home2MonthCursor = new Date();
 let home2WeekCursor = new Date();
 const H2_MONTH_DOT_CAP = 4;
+// Home 2's Watchlist card fetches quotes from this Cloudflare Worker instead
+// of embedding the trading server's watchlist-widget.html — the iframe
+// embed only ever worked on the trading Mac's own Wi-Fi (mixed-content
+// blocks https->http, same as Open Trades), which isn't acceptable for a
+// kitchen display that should just work. The Worker proxies Yahoo Finance's
+// public chart endpoint (no key, no login) with CORS enabled for this
+// origin, so this is a plain cross-origin fetch, no iframe involved.
+const QUOTES_WORKER_URL = "https://family-hub-quotes.taarora-b77.workers.dev/";
 
 function renderH2Month(){
   const y = home2MonthCursor.getFullYear(), m = home2MonthCursor.getMonth();
@@ -1180,16 +1188,42 @@ function renderH2Weather(){
       <div class="hl">${Math.round(d.hi)}° <span class="lo">${Math.round(d.lo)}°</span></div>
     </div>`).join("");
 }
+const num2 = (n, d=2) => n == null || Number.isNaN(n) ? "—" : Number(n).toFixed(d);
+const pctStr = n => n == null || Number.isNaN(n) ? "—" : (n>0?"+":"") + Number(n).toFixed(2) + "%";
 async function renderH2Watchlist(){
   const host = document.getElementById("h2WatchlistBody");
   if(!host) return;
-  const tickers = watchlistStore.list.map(w=>w.ticker).filter(Boolean);
+  const tickers = watchlistStore.list.map(w=>w.ticker).filter(Boolean).sort();
   if(!tickers.length){
     host.innerHTML = `<div class="ticker-off compact"><div>No tickers yet.</div><div class="hint">Add some from the Markets tab.</div></div>`;
     return;
   }
-  const url = watchlistWidgetUrl(CFG.wallUrl, tickers);
-  await renderTradingEmbed(host, url, {compact:true, emptyMsg:"No trading server address set.", offMsg:"Not reachable right now."});
+  let quotes = {};
+  try{
+    const ctrl = new AbortController();
+    const t = setTimeout(()=>ctrl.abort(), 6000);
+    const r = await fetch(QUOTES_WORKER_URL + "?symbols=" + encodeURIComponent(tickers.join(",")), {cache:"no-store", signal:ctrl.signal});
+    clearTimeout(t);
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    quotes = (await r.json()).quotes || {};
+  }catch(e){
+    host.innerHTML = `<div class="ticker-off compact"><div class="big" style="font-size:22px;">📴</div><div>Can't reach quotes right now.</div></div>`;
+    return;
+  }
+  const rows = tickers.map(sym=>{
+    const q = quotes[sym];
+    const chgClass = !q || q.change_pct == null ? "qflat" : q.change_pct > 0 ? "qup" : q.change_pct < 0 ? "qdown" : "qflat";
+    const arrow = !q || q.change_pct == null ? "" : q.change_pct > 0 ? "▲ " : q.change_pct < 0 ? "▼ " : "";
+    return `<tr>
+      <td class="sym">${escapeHtml(sym)}</td>
+      <td class="num">${q ? num2(q.last) : "—"}</td>
+      <td class="num ${chgClass}">${q ? arrow + pctStr(q.change_pct) : "—"}</td>
+    </tr>`;
+  }).join("");
+  host.innerHTML = `<table class="h2-quote-table">
+    <thead><tr><th>Ticker</th><th class="num">Last</th><th class="num">% Chg</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 function renderHome2(){
   renderH2Month();
@@ -1484,6 +1518,10 @@ function boot(){
   setInterval(()=>loadCalendar().then(()=>{ if(currentScreen==="calendar") renderCalendar(); renderHome(); renderHome2(); }), 15*60*1000);
   setInterval(()=>{ renderWeather().then(renderHome2); }, 30*60*1000);
   setInterval(renderNavVisibility, 5*60*1000);
+  // Quotes move fast enough that the 30-min weather/calendar cadence above
+  // would look stale; only bother fetching while the card's actually on
+  // screen.
+  setInterval(()=>{ if(currentScreen==="home2") renderH2Watchlist(); }, 60*1000);
   startRotation();
   goto("home");
 

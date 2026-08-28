@@ -284,10 +284,25 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .h2-wx-body .wx-day .ic{font-size:19px; margin:4px 0;}
 .h2-wx-body .wx-day .hl{font-size:11.5px;}
 
-.h2-watchlist-body{padding:0; display:flex;}
+.h2-watchlist-body{padding:6px 14px 14px;}
 .h2-watchlist-body .trading-embed-frame, .h2-watchlist-body .ticker-off{width:100%;}
 .ticker-off.compact{height:auto; padding:20px 8px; gap:6px;}
 .ticker-off.compact .hint{font-size:11.5px;}
+
+/* Home 2 watchlist — native table fed straight from the Cloudflare quote
+   proxy (see /worker) rather than an iframe embed, so it works from
+   anywhere, not just on the trading server's own Wi-Fi. Up/down uses the
+   same blue/orange pair as the calendar's Travel/Friends categories —
+   never red/green — so it reads correctly under deuteranopia. */
+.h2-quote-table{width:100%; border-collapse:collapse; font-size:13.5px;}
+.h2-quote-table th{text-align:left; font-size:10.5px; font-weight:800; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; padding:2px 4px 8px;}
+.h2-quote-table th.num, .h2-quote-table td.num{text-align:right;}
+.h2-quote-table td{padding:7px 4px; border-top:1px solid var(--line); font-weight:700;}
+.h2-quote-table tr:first-child td{border-top:none;}
+.h2-quote-table .sym{font-weight:800;}
+.h2-quote-table .qup{color:var(--cat-travel);}
+.h2-quote-table .qdown{color:var(--cat-friends);}
+.h2-quote-table .qflat{color:var(--dim);}
 
 .wl-chips{display:flex; flex-wrap:wrap; gap:8px;}
 .wl-chip{
