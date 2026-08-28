@@ -253,6 +253,35 @@ function makeFirestoreStore(collectionName){
 let itemsStore = makeLocalStore("hub_items_local");
 let recipesStore = makeLocalStore("hub_recipes_local");
 
+// If this device ever operated in local-only mode (Firebase not configured,
+// or misconfigured) while items/recipes were added, those additions are
+// stranded in this browser's localStorage — the app has no way to know they
+// exist once it switches back to a Firestore-backed store. Sweep them into
+// Firestore the moment a connection succeeds so nothing added offline is
+// silently lost. Safe to call repeatedly — it dedupes against what's already
+// in Firestore and only clears the local cache after a successful merge.
+async function mergeLocalIntoFirestore(localKey, collectionName, keyFn){
+  try{
+    const raw = localStorage.getItem(localKey);
+    if(!raw) return;
+    const local = JSON.parse(raw);
+    if(!Array.isArray(local) || !local.length) return;
+    const col = fbDb.collection("families").doc(CFG.firebase.familyId).collection(collectionName);
+    const snap = await col.get();
+    const existing = new Set(snap.docs.map(d=>keyFn(d.data())));
+    let merged = 0;
+    for(const entry of local){
+      if(existing.has(keyFn(entry))) continue;
+      const {id, ...data} = entry;
+      await col.doc(id).set({...data, createdAt: data.createdAt || Date.now()});
+      merged++;
+    }
+    if(merged) toast(`Recovered ${merged} item${merged===1?'':'s'} saved while offline`);
+    localStorage.removeItem(localKey);
+  }catch(e){
+    console.warn("Local→Firestore merge failed for "+collectionName, e);
+  }
+}
 function initFirebase(){
   const dot = document.getElementById("fbStatusDot"), txt = document.getElementById("fbStatusText");
   if(!firebaseConfigured()){
@@ -277,6 +306,8 @@ function initFirebase(){
     dot.className = "statusdot ok";
     txt.textContent = "Connected — syncing live across devices";
     fbReady = true;
+    mergeLocalIntoFirestore("hub_items_local", "items", d=>((d.text||"")+"|"+(d.tag||"")).trim().toLowerCase());
+    mergeLocalIntoFirestore("hub_recipes_local", "recipes", d=>(d.title||"").trim().toLowerCase());
   }catch(e){
     console.warn("Firebase init failed", e);
     dot.className = "statusdot bad";
@@ -294,6 +325,7 @@ let calEvents = [];       // flattened, expanded occurrences within a working wi
 let calRawEvents = [];    // raw parsed VEVENTs (unexpanded)
 let calDayCursor = new Date();
 let calWeekCursor = new Date();
+let calMonthCursor = new Date();
 let calView = "schedule";
 
 function unfoldICS(text){
@@ -599,11 +631,37 @@ function renderWeeklyView(){
   }
   host.innerHTML = html;
 }
+const MONTH_DAY_EVT_CAP = 3;
+function renderMonthlyView(){
+  const y = calMonthCursor.getFullYear(), m = calMonthCursor.getMonth();
+  document.getElementById("monthLabel").textContent = calMonthCursor.toLocaleDateString([], {month:"long", year:"numeric"});
+  const headHost = document.getElementById("monthHead");
+  if(!headHost.childElementCount){
+    headHost.innerHTML = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=>`<div>${d}</div>`).join("");
+  }
+  const gridStart = startOfWeek(new Date(y, m, 1));
+  const today = new Date();
+  let html = "";
+  for(let i=0;i<42;i++){
+    const d = new Date(+gridStart + i*86400000);
+    const otherMonth = d.getMonth() !== m;
+    const dayEvts = calEvents.filter(e=>sameDay(e.occStart,d));
+    const shown = dayEvts.slice(0, MONTH_DAY_EVT_CAP);
+    const extra = dayEvts.length - shown.length;
+    html += `<div class="mday ${otherMonth?'other-month':''} ${sameDay(d,today)?'today':''}">
+      <div class="md-num">${d.getDate()}</div>
+      ${shown.map(e=>`<div class="mevt ${CAT_META[e.cat].cls}">${CAT_META[e.cat].icon} ${escapeHtml(e.title)}</div>`).join("")}
+      ${extra>0 ? `<div class="md-more">+${extra} more</div>` : ""}
+    </div>`;
+  }
+  document.getElementById("monthGrid").innerHTML = html;
+}
 function renderCalendar(){
   renderCalLegend();
   if(calView==="schedule") renderScheduleView();
   if(calView==="daily") renderDailyView();
   if(calView==="weekly") renderWeeklyView();
+  if(calView==="monthly") renderMonthlyView();
 }
 document.querySelectorAll(".viewtabs button").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -613,6 +671,7 @@ document.querySelectorAll(".viewtabs button").forEach(btn=>{
     document.getElementById("calSchedule").style.display = calView==="schedule" ? "" : "none";
     document.getElementById("calDaily").style.display = calView==="daily" ? "" : "none";
     document.getElementById("calWeekly").style.display = calView==="weekly" ? "" : "none";
+    document.getElementById("calMonthly").style.display = calView==="monthly" ? "" : "none";
     renderCalendar();
   });
 });
@@ -620,6 +679,8 @@ document.getElementById("dayPrev").addEventListener("click", ()=>{ calDayCursor 
 document.getElementById("dayNext").addEventListener("click", ()=>{ calDayCursor = new Date(+calDayCursor+86400000); renderDailyView(); });
 document.getElementById("weekPrev").addEventListener("click", ()=>{ calWeekCursor = new Date(+calWeekCursor-7*86400000); renderWeeklyView(); });
 document.getElementById("weekNext").addEventListener("click", ()=>{ calWeekCursor = new Date(+calWeekCursor+7*86400000); renderWeeklyView(); });
+document.getElementById("monthPrev").addEventListener("click", ()=>{ calMonthCursor = new Date(calMonthCursor.getFullYear(), calMonthCursor.getMonth()-1, 1); renderMonthlyView(); });
+document.getElementById("monthNext").addEventListener("click", ()=>{ calMonthCursor = new Date(calMonthCursor.getFullYear(), calMonthCursor.getMonth()+1, 1); renderMonthlyView(); });
 document.getElementById("calRefresh").addEventListener("click", ()=>{ loadCalendar().then(renderCalendar); toast("Refreshing calendar…"); });
 
 /* --------------------------------------------------------- 6. WEATHER --- */
@@ -756,6 +817,21 @@ function normalizeWallUrl(raw){
   if(!s) return s;
   return /^https?:\/\//i.test(s) ? s : "http://" + s;
 }
+// The Settings field just needs "your trading app's address" (whatever the
+// user already had pointed at wall.html, or a bare host:port). The Markets
+// tab itself always loads open-cards.html — the read-only trade-card kiosk
+// page, same server, same static folder — so swap in that filename off the
+// same origin regardless of what path was actually typed/saved.
+function openCardsUrl(raw){
+  const url = normalizeWallUrl(raw);
+  if(!url) return url;
+  try{
+    const u = new URL(url);
+    return u.origin + "/open-cards.html";
+  }catch(e){
+    return url;
+  }
+}
 async function reachable(url, timeoutMs=2500){
   try{
     const ctrl = new AbortController();
@@ -767,9 +843,9 @@ async function reachable(url, timeoutMs=2500){
 }
 async function renderTicker(){
   const host = document.getElementById("tickerHost");
-  const url = normalizeWallUrl(CFG.wallUrl);
+  const url = openCardsUrl(CFG.wallUrl);
   if(!url){
-    host.innerHTML = `<div class="ticker-off"><div class="big">📈</div><div>No ticker wall URL set.</div><div class="hint">Add your trading app's network address in Settings.</div></div>`;
+    host.innerHTML = `<div class="ticker-off"><div class="big">📈</div><div>No trading server address set.</div><div class="hint">Add your trading app's network address in Settings.</div></div>`;
     return;
   }
   // A page served securely (https, e.g. GitHub Pages) can't embed a plain-http
@@ -789,7 +865,7 @@ async function renderTicker(){
   host.innerHTML = `<div class="ticker-off"><div class="big">⏳</div><div>Checking connection…</div></div>`;
   const ok = await reachable(url);
   if(!ok){
-    host.innerHTML = `<div class="ticker-off"><div class="big">📴</div><div>Ticker wall isn't reachable.</div>
+    host.innerHTML = `<div class="ticker-off"><div class="big">📴</div><div>Open Trades page isn't reachable.</div>
       <div class="hint">Make sure your Mac and the trading server are on, and this device is on the same Wi-Fi as ${escapeHtml(url)}.</div></div>`;
     return;
   }
@@ -799,12 +875,44 @@ document.getElementById("tickerRetry").addEventListener("click", renderTicker);
 
 /* ------------------------------------------------------------ 8. HOME --- */
 let homeStoreFilter = "all";
-function checklistRow(item, showDelete){
+let homeDayCursor = (()=>{ const d = new Date(); d.setHours(0,0,0,0); return d; })();
+function checklistRow(item, showDelete, showStore){
+  const store = showStore && item.tag==="grocery" ? STORE_META[item.store||"wegmans"] : null;
   return `<div class="list-item ${item.done?'done':''}" data-id="${item.id}">
     <div class="check ${item.done?'on':''}">✓</div>
     <div class="list-text">${escapeHtml(item.text)}</div>
+    ${store ? `<div class="list-tag">${store.icon} ${escapeHtml(store.label)}</div>` : ''}
+    ${showDelete ? '<button class="edit">✏️</button>' : ''}
     ${showDelete ? '<button class="del">✕</button>' : ''}
   </div>`;
+}
+function wireItemEdit(host){
+  host.querySelectorAll(".edit").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      const row = btn.closest(".list-item");
+      const id = row.dataset.id;
+      const current = itemsStore.list.find(i=>i.id===id);
+      const textEl = row.querySelector(".list-text");
+      if(!current || !textEl || row.querySelector(".edit-input")) return;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "edit-input";
+      input.value = current.text;
+      textEl.replaceWith(input);
+      input.focus();
+      input.select();
+      input.addEventListener("keydown", ev=>{
+        if(ev.key==="Enter"){ ev.preventDefault(); input.blur(); }
+        else if(ev.key==="Escape"){ input.value = current.text; input.blur(); }
+      });
+      input.addEventListener("blur", ()=>{
+        const val = input.value.trim();
+        if(val && val !== current.text) itemsStore.update(id, {text: val});
+        else renderAllListViews();
+      });
+    });
+  });
 }
 function catCounts(days){
   const now = new Date();
@@ -828,7 +936,7 @@ function renderHomeDayGrid(){
   const today = new Date(); today.setHours(0,0,0,0);
   let html = "";
   for(let i=0;i<6;i++){
-    const d = new Date(+today + i*86400000);
+    const d = new Date(+homeDayCursor + i*86400000);
     const dayEvts = calEvents.filter(e=>sameDay(e.occStart,d)).slice(0,4);
     html += `<div class="day-card ${sameDay(d,today)?'today':''}">
       <div class="dc-head">
@@ -844,6 +952,17 @@ function renderHomeDayGrid(){
   }
   host.innerHTML = html;
 }
+document.getElementById("homeWeekNext").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  homeDayCursor = new Date(+homeDayCursor + 7*86400000);
+  renderHomeDayGrid();
+});
+document.getElementById("homeWeekToday").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  const d = new Date(); d.setHours(0,0,0,0);
+  homeDayCursor = d;
+  renderHomeDayGrid();
+});
 function renderHomeChores(){
   const host = document.getElementById("homeChores");
   const items = itemsStore.list.filter(i=>i.tag==="todo" && !i.done).slice(0,8);
@@ -855,7 +974,7 @@ function renderHomeGrocery(){
   let items = itemsStore.list.filter(i=>i.tag==="grocery" && !i.done);
   if(homeStoreFilter !== "all") items = items.filter(i=>(i.store||"wegmans")===homeStoreFilter);
   items = items.slice(0,8);
-  host.innerHTML = items.length ? items.map(i=>checklistRow(i,false)).join("") : `<div class="empty">Nothing on the list 🎉</div>`;
+  host.innerHTML = items.length ? items.map(i=>checklistRow(i,false,true)).join("") : `<div class="empty">Nothing on the list 🎉</div>`;
   wireCheckboxes(host);
 }
 document.getElementById("homeStoreSelect").addEventListener("click", (e)=>e.stopPropagation());
@@ -926,6 +1045,7 @@ function renderGroceryColumns(){
     items = [...items].sort((a,b)=>(a.done?1:0)-(b.done?1:0));
     host.innerHTML = items.length ? items.map(i=>checklistRow(i,true)).join("") : `<div class="empty" style="padding:12px 4px;">Nothing yet.</div>`;
     wireCheckboxes(host);
+    wireItemEdit(host);
     host.querySelectorAll(".del").forEach(btn=>{
       btn.addEventListener("click", ()=>{
         itemsStore.remove(btn.closest(".list-item").dataset.id);
@@ -944,6 +1064,7 @@ function renderList(){
     items = [...items].sort((a,b)=>(a.done?1:0)-(b.done?1:0));
     host.innerHTML = items.length ? items.map(i=>checklistRow(i,true)).join("") : `<div class="empty">Nothing here yet — add something above.</div>`;
     wireCheckboxes(host);
+    wireItemEdit(host);
     host.querySelectorAll(".del").forEach(btn=>{
       btn.addEventListener("click", ()=>{
         itemsStore.remove(btn.closest(".list-item").dataset.id);
@@ -1092,6 +1213,25 @@ document.getElementById("settingsExport").addEventListener("click", async ()=>{
     const ta = document.createElement("textarea"); ta.value = json; document.body.appendChild(ta); ta.select();
     document.execCommand("copy"); ta.remove(); toast("Config copied to clipboard");
   }
+});
+document.getElementById("settingsBackup").addEventListener("click", ()=>{
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    config: CFG,
+    items: itemsStore.list,
+    recipes: recipesStore.list
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `family-hub-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast("Backup downloaded");
 });
 document.getElementById("settingsImport").addEventListener("click", ()=>{ document.getElementById("importModalBack").hidden = false; });
 document.getElementById("importCancel").addEventListener("click", ()=>{ document.getElementById("importModalBack").hidden = true; });
