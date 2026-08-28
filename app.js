@@ -24,6 +24,7 @@ const DEFAULTS = {
   rotate: { enabled:false, interval:30, screens:["home","calendar","weather","ticker","list"] },
   hideWeekendTicker: true,
   icsUrl: "",
+  rtdbUrl: "",
   wallUrl: "",
   weather: { lat:null, lon:null, label:"" },
   keywords: {
@@ -422,10 +423,64 @@ async function fetchICS(){
     }
   }
 }
+// Shortcuts → Realtime Database feed. A Shortcuts Automation reads Calendar
+// natively on-device (zero CORS, zero Apple-CDN blocking — the thing that
+// makes the ICS/CORS-proxy path below unreliable) and PUTs the events as
+// plain JSON to a Firebase Realtime Database path. Shortcuts already expands
+// recurrence into concrete occurrences, so no RRULE work is needed here —
+// events go straight into calEvents. See SETUP.md for the Shortcut build.
+async function fetchRtdbEvents(){
+  const base = CFG.rtdbUrl.trim().replace(/\/+$/, "");
+  const familyId = CFG.firebase.familyId.trim() || "default";
+  const url = `${base}/families/${encodeURIComponent(familyId)}/calendarFeed.json`;
+  const res = await fetch(url, {cache:"no-store"});
+  if(!res.ok) throw new Error("Realtime Database HTTP "+res.status);
+  const data = await res.json();
+  if(!data || !Array.isArray(data.events)) throw new Error("No calendar feed yet — run the Shortcut once");
+  return data.events;
+}
+function eventsToCalEvents(rawEvents){
+  return rawEvents.map(e => ({
+    title: e.title || "(untitled)",
+    occStart: new Date(e.start),
+    occEnd: new Date(e.end || e.start),
+    allDay: !!e.allDay,
+    location: e.location || "",
+    cat: categorize(e.title || "")
+  })).filter(e => !isNaN(+e.occStart)).sort((a,b)=>a.occStart-b.occStart);
+}
 async function loadCalendar(){
   const dot = document.getElementById("icsStatusDot"), txt = document.getElementById("icsStatusText");
+
+  // Preferred path: the Shortcuts-fed Realtime Database snapshot.
+  if(CFG.rtdbUrl.trim()){
+    try{
+      const rawEvents = await fetchRtdbEvents();
+      calEvents = eventsToCalEvents(rawEvents);
+      localStorage.setItem("hub_rtdb_cache", JSON.stringify({at:Date.now(), rawEvents}));
+      if(dot){ dot.className="statusdot ok"; txt.textContent = "Connected (Shortcuts feed) — " + calEvents.length + " events"; }
+      return;
+    }catch(e){
+      console.warn("Realtime Database calendar fetch failed", e);
+      const cached = localStorage.getItem("hub_rtdb_cache");
+      if(cached){
+        const {at, rawEvents} = JSON.parse(cached);
+        calEvents = eventsToCalEvents(rawEvents);
+        if(dot){ dot.className="statusdot warn"; txt.textContent = "Using cached Shortcuts feed from " + new Date(at).toLocaleString(); }
+        return;
+      }
+      if(dot){ dot.className="statusdot bad"; txt.textContent = "Shortcuts feed: " + e.message; }
+      if(!CFG.icsUrl.trim()){ calEvents = []; return; }
+      // fall through to the ICS path below as a second attempt
+    }
+  }
+
+  // Fallback / alternative path: direct public ICS link, with a CORS-proxy
+  // relay for hosts (Apple's included) that don't set CORS headers. Less
+  // reliable against Apple's CDN specifically — see SETUP.md — which is why
+  // the Realtime Database path above is preferred when configured.
   if(!CFG.icsUrl.trim()){
-    if(dot){ dot.className="statusdot warn"; txt.textContent="No calendar link set yet"; }
+    if(dot){ dot.className="statusdot warn"; txt.textContent="No calendar source set yet"; }
     calRawEvents = [];
     localStorage.removeItem("hub_ics_cache");
     return;
@@ -842,6 +897,7 @@ function loadSettingsUI(){
       b.classList.toggle("on");
     });
   });
+  document.getElementById("setRtdb").value = CFG.rtdbUrl;
   document.getElementById("setIcs").value = CFG.icsUrl;
   document.getElementById("kwTravel").value = CFG.keywords.travel;
   document.getElementById("kwPhoto").value = CFG.keywords.photo;
@@ -870,6 +926,7 @@ document.getElementById("settingsSave").addEventListener("click", async ()=>{
   CFG.night.start = document.getElementById("nightStart").value;
   CFG.night.end = document.getElementById("nightEnd").value;
   CFG.rotate.interval = Math.max(5, parseInt(document.getElementById("rotateInterval").value,10) || 30);
+  CFG.rtdbUrl = document.getElementById("setRtdb").value.trim();
   CFG.icsUrl = document.getElementById("setIcs").value.trim();
   CFG.keywords.travel = document.getElementById("kwTravel").value;
   CFG.keywords.photo = document.getElementById("kwPhoto").value;

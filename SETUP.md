@@ -40,19 +40,50 @@ That's it — no server to run, no monthly bill at this scale (Firestore's free 
 
 ---
 
-## 3. Connect your iOS Family Shared Calendar
+## 3. Connect your Family Shared Calendar
 
-Safari can't read a private iCloud calendar directly, so you publish a read-only link to it:
+Tried the simple route first — Safari can't read a private iCloud calendar directly, so the original plan was publishing a read-only ICS link and fetching it. In testing, Apple's calendar servers turned out to actively block that kind of fetch (direct and via CORS-relay both failed against `p182-caldav.icloud.com`), so that path is now the **fallback**, not the main one. The reliable route uses a Shortcuts Automation, which reads Calendar natively on-device — no CORS, nothing for Apple's CDN to block.
 
-1. On iPhone/iPad: **Calendar app → Calendars** (tap the word "Calendars" at the bottom) → tap the **(i)** next to your shared family calendar.
-2. Tap **Public Calendar** → toggle it **on**.
-3. Tap **Share Link** — copy it. It'll look like `webcal://p12-caldav.icloud.com/published/2/…`.
-4. In the Hub → **Settings → Family Calendar** → paste it into "Public ICS / webcal link" → **Save Settings**.
-5. The status dot should go green with an event count. If it can't reach it directly it automatically retries through a public relay service (allorigins.win) — that's normal and only matters for the calendar fetch, nothing else.
+### 3a. Recommended: Shortcuts Automation → Realtime Database
+
+**One-time: turn on Realtime Database** (a second free product in the same Firebase project from step 2 — separate from Firestore, and it's what makes this Shortcut simple to build: plain JSON, no typed-field wrapping):
+1. [console.firebase.google.com](https://console.firebase.google.com) → your `family-hub` project → **Build → Realtime Database → Create Database** → start in **test mode** → pick any region.
+2. Copy the **databaseURL** shown at the top of that page (looks like `https://family-hub-xxxxx-default-rtdb.firebaseio.com`).
+3. In the Hub → **Settings → Family Calendar** → paste it into "Shortcuts feed — Realtime Database URL" → **Save Settings**.
+
+**Build the Shortcut** (Shortcuts app, iPhone/iPad or Mac — it's the same app either way, and it syncs across your devices automatically once made on one):
+1. New Shortcut, name it "Push Family Calendar".
+2. Add **Find Calendar Events**: set "Start Date" → "is in the next" → `60` → `Days`. Tap it to expand advanced options, set **Calendars** to "Only" and pick your shared Family calendar (not "Any Calendar" — you don't want your personal calendar mixed in unless you want that).
+3. Add **Repeat with Each**, using the Find Calendar Events result as the input.
+4. Inside the repeat, add a **Dictionary** action with these key/value pairs (use the blue "Repeat Item" variable for each value):
+   - `title` → Repeat Item
+   - `start` → Repeat Item's Start Date, but first drop in a **Format Date** action set to **ISO 8601** and feed Repeat Item's Start Date through it, then use that formatted result here
+   - `end` → same idea with Repeat Item's End Date through another Format Date (ISO 8601)
+   - `allDay` → Repeat Item's "All-day" (boolean)
+   - `location` → Repeat Item's Location
+5. Still inside the repeat, add **Add to Variable** → new variable named `EventList`, add the Dictionary from step 4 to it.
+6. After the repeat ends, add another **Dictionary** action: `events` → the `EventList` variable, `updatedAt` → Current Date (Format Date, ISO 8601).
+7. Add **Get Contents of URL**:
+   - URL: `<your databaseURL>/families/<your family ID>/calendarFeed.json` (same family ID you used in Firebase settings — e.g. `arora-family`)
+   - Method: **PUT**
+   - Request Body: **JSON**, set to the Dictionary from step 6
+8. Run it once manually to test — then check the Hub's Settings screen; the status dot should go green with an event count.
+9. Make it automatic: **Automation tab → + → Time of Day** → pick a time, set **Repeat: Hourly** (or whatever cadence you like) → choose **Push Family Calendar** → turn **off** "Ask Before Running" so it runs silently in the background.
+
+If a step doesn't look quite like what's on your screen (Apple tweaks the Shortcuts UI often), tell me where it diverges and I'll help sort it out — I can also drive your Mac's screen directly if that's easier than describing it back and forth.
+
+### 3b. Fallback: public ICS link (less reliable)
+
+1. On iPhone/iPad: **Calendar app → Calendars** → tap the **(i)** next to your shared family calendar.
+2. Tap **Public Calendar** → toggle it **on** → **Share Link** → copy it (`webcal://p182-caldav.icloud.com/published/2/…`).
+3. Hub → **Settings → Family Calendar** → paste into "Fallback: public ICS / webcal link" → **Save Settings**.
+4. This only gets used when the Shortcuts feed above isn't configured or fails — and even then, expect it to fail against Apple's servers more often than not. Keep it as a backstop, not the primary plan.
 
 **Heads up:** "Public" here means anyone with that exact long random link could view the calendar read-only — nobody can guess it, but don't post the link anywhere public.
 
-Event color-coding (blue travel, green photography, red doctor, orange friends) is done by matching keywords in the event title — the default keyword lists are already sensible, but you can edit them in the same Settings section if an event lands in the wrong bucket. Every event also gets a small icon (✈️ 📷 ⚕️ ☕) next to it so the category is never color-only — useful given deuteranopia washes out red/green specifically.
+### Color-coding
+
+Blue travel, green photography, red doctor, orange friends — done by matching keywords in the event title (edit the keyword lists in the same Settings section if something lands in the wrong bucket). Every event also gets a small icon (✈️ 📷 ⚕️ ☕) next to it so the category is never color-only — useful given deuteranopia washes out red/green specifically.
 
 ---
 

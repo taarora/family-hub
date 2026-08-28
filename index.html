@@ -482,12 +482,17 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
       </div>
 
       <div class="set-section">
-        <h3>Family Calendar (iCloud)</h3>
+        <h3>Family Calendar</h3>
         <div class="field">
-          <label>Public ICS / webcal link</label>
+          <label>Shortcuts feed — Realtime Database URL (recommended)</label>
+          <input type="text" id="setRtdb" placeholder="https://family-hub-xxxxx-default-rtdb.firebaseio.com">
+        </div>
+        <div class="hint" style="margin-bottom:14px;">A Shortcuts Automation reads your Calendar natively (no Apple CORS issues) and pushes events here on a schedule. Set this and the ICS link below becomes a fallback. Full Shortcut build steps in SETUP.md.</div>
+        <div class="field">
+          <label>Fallback: public ICS / webcal link</label>
           <input type="text" id="setIcs" placeholder="webcal://p12-caldav.icloud.com/published/2/…">
         </div>
-        <div class="hint" style="margin-bottom:8px;">iOS Calendar app → your shared calendar → <i>Share Calendar</i> → toggle <i>Public Calendar</i> on → copy the link. See SETUP.md for exact steps and screenshots-in-words.</div>
+        <div class="hint" style="margin-bottom:8px;">Works without any Shortcuts setup, but Apple's calendar servers block most cross-origin/proxy fetches, so this path can be unreliable — the Shortcuts feed above is the sturdier option. iOS Calendar app → your shared calendar → <i>Share Calendar</i> → toggle <i>Public Calendar</i> on → copy the link.</div>
         <div class="row"><span class="statusdot" id="icsStatusDot"></span><span id="icsStatusText" class="hint">Not checked yet</span></div>
       </div>
 
