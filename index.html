@@ -231,6 +231,75 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .day-evt.cat-friends{background:var(--cat-friends); color:#241900;}
 .day-evt.cat-other{background:var(--cat-other); color:#fff;}
 
+/* ------------------------------------------------------------- HOME 2 --- */
+#screen-home2 .h2-grid{
+  display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:14px; height:calc(100% - 2px); align-items:stretch;
+}
+@media (max-width:1180px){ #screen-home2 .h2-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); height:auto; } }
+@media (max-width:620px){ #screen-home2 .h2-grid{ grid-template-columns:minmax(0,1fr); } }
+.h2-col{display:flex; flex-direction:column; gap:14px; min-height:0;}
+.h2-card{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column; min-height:0;
+}
+.h2-card-head{
+  background:linear-gradient(135deg,var(--accent),#3f6fd6); color:#fff; font-weight:800; font-size:13.5px;
+  padding:9px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;
+  flex-wrap:nowrap;
+}
+.h2-card-head > span:first-child{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
+.h2-card-body{padding:10px 12px; flex:1; overflow-y:auto; min-height:60px;}
+.h2-nav{display:flex; align-items:center; gap:4px; font-weight:700; font-size:11.5px; color:rgba(255,255,255,.92);}
+.h2-nav b{font-weight:800; white-space:nowrap;}
+.h2-navbtn{
+  width:22px; height:22px; border-radius:7px; border:none; background:rgba(255,255,255,.22); color:#fff;
+  font-size:14px; line-height:1; cursor:pointer; flex-shrink:0;
+}
+.h2-navbtn:active{transform:scale(.9);}
+.h2-today{
+  min-height:0; padding:3px 8px; border-radius:8px; border:none; background:rgba(255,255,255,.22); color:#fff;
+  font-weight:800; font-size:10.5px; cursor:pointer; flex-shrink:0; margin-left:2px;
+}
+.h2-today:active{transform:scale(.94);}
+
+.h2-monthhead{display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:4px;}
+.h2-monthhead div{text-align:center; font-size:9.5px; font-weight:800; color:var(--faint); text-transform:uppercase;}
+.h2-monthgrid{display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr); gap:3px; height:132px;}
+.h2-mday{
+  background:var(--panel2); border-radius:6px; padding:3px 2px 2px; display:flex; flex-direction:column; align-items:center;
+}
+.h2-mday.other-month{opacity:.35;}
+.h2-mday.today{background:var(--accent); }
+.h2-mday.today .h2-mnum{color:#fff;}
+.h2-mnum{font-size:10.5px; font-weight:800;}
+.h2-mdots{display:flex; gap:2px; margin-top:2px; flex-wrap:wrap; justify-content:center;}
+.h2-dot{width:5px; height:5px; border-radius:50%; background:currentColor;}
+
+.h2-day-label{font-size:11px; font-weight:800; color:var(--faint); text-transform:uppercase; letter-spacing:.05em; margin:8px 0 2px;}
+.h2-day-label:first-child{margin-top:0;}
+
+.h2-wx-body{display:grid; grid-template-columns:repeat(4,1fr); gap:6px;}
+@media (max-width:1180px){ .h2-wx-body{grid-template-columns:repeat(7,1fr);} }
+.h2-wx-body .wx-day{padding:8px 3px;}
+.h2-wx-body .wx-day .ic{font-size:19px; margin:4px 0;}
+.h2-wx-body .wx-day .hl{font-size:11.5px;}
+
+.h2-watchlist-body{padding:0; display:flex;}
+.h2-watchlist-body .trading-embed-frame, .h2-watchlist-body .ticker-off{width:100%;}
+.ticker-off.compact{height:auto; padding:20px 8px; gap:6px;}
+.ticker-off.compact .hint{font-size:11.5px;}
+
+.wl-chips{display:flex; flex-wrap:wrap; gap:8px;}
+.wl-chip{
+  display:inline-flex; align-items:center; gap:6px; padding:5px 6px 5px 12px; border-radius:999px;
+  background:var(--panel2); border:1px solid var(--line); font-weight:800; font-size:13px;
+}
+.wl-chip-x{
+  width:22px; height:22px; border-radius:50%; border:none; background:var(--line2); color:var(--tx);
+  font-size:11px; cursor:pointer; flex-shrink:0;
+}
+button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
+
 /* --------------------------------------------------------- topbar wx --- */
 .wx-chip{display:flex; align-items:center; gap:5px; font-size:13px; font-weight:700; color:var(--dim); white-space:nowrap;}
 .wx-chip .ic{font-size:17px;}
@@ -324,7 +393,8 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .wx-day .hl .lo{color:var(--faint); font-weight:600;}
 
 /* ---------------------------------------------------------- TICKER ----- */
-#tickerFrame{width:100%; height:calc(100% - 4px); border:0; border-radius:var(--radius); background:#07090d;}
+.trading-embed-frame{width:100%; height:calc(100% - 4px); border:0; border-radius:var(--radius); background:#07090d;}
+.h2-watchlist-body .trading-embed-frame{height:100%; min-height:120px; background:transparent;}
 .ticker-off{display:flex; flex-direction:column; align-items:center; justify-content:center; height:70%; text-align:center; gap:14px; color:var(--dim);}
 .ticker-off .big{font-size:40px;}
 
@@ -420,6 +490,7 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 
   <nav id="screenNav">
     <button class="navbtn active" data-screen="home"><span class="ic">🏠</span>Home</button>
+    <button class="navbtn" data-screen="home2"><span class="ic">🧊</span>Home 2</button>
     <button class="navbtn" data-screen="calendar"><span class="ic">📅</span>Calendar</button>
     <button class="navbtn" data-screen="weather"><span class="ic">⛅</span>Weather</button>
     <button class="navbtn" data-screen="ticker" id="navTicker"><span class="ic">📈</span>Markets</button>
@@ -468,6 +539,86 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
             <div class="hp-body" id="homeGrocery"></div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ========================================================== HOME 2 -->
+    <!-- Prototype layout, side by side with the original Home tab for comparison —
+         see index.html/app.js "8b. HOME 2" for the reasoning. Every card here is
+         read-only + a checkbox; adding/editing still happens on the tab that owns
+         that data (Lists, Markets). -->
+    <section class="screen" id="screen-home2">
+      <div class="h2-grid">
+
+        <div class="h2-col">
+          <div class="h2-card">
+            <div class="h2-card-head">
+              <span>📅 Monthly</span>
+              <span class="h2-nav">
+                <button class="h2-navbtn" id="h2MonthPrev">‹</button>
+                <b id="h2MonthLabel"></b>
+                <button class="h2-navbtn" id="h2MonthNext">›</button>
+              </span>
+            </div>
+            <div class="h2-card-body h2-month-body">
+              <div id="h2MonthHead" class="h2-monthhead"></div>
+              <div id="h2MonthGrid" class="h2-monthgrid"></div>
+            </div>
+          </div>
+          <div class="h2-card" style="flex:1;">
+            <div class="h2-card-head">
+              <span>🗓️ Week</span>
+              <span class="h2-nav">
+                <button class="h2-navbtn" id="h2WeekPrev">‹</button>
+                <b id="h2WeekLabel"></b>
+                <button class="h2-navbtn" id="h2WeekNext">›</button>
+                <button class="h2-today" id="h2WeekToday">Today</button>
+              </span>
+            </div>
+            <div class="h2-card-body" id="h2WeekBody"></div>
+          </div>
+        </div>
+
+        <div class="h2-col">
+          <div class="h2-card" style="flex:1;">
+            <div class="h2-card-head"><span>🥬 Groceries — Wegmans</span></div>
+            <div class="h2-card-body" id="h2g-wegmans"></div>
+          </div>
+          <div class="h2-card" style="flex:1;">
+            <div class="h2-card-head"><span>🌶️ Groceries — Indian</span></div>
+            <div class="h2-card-body" id="h2g-indian"></div>
+          </div>
+          <div class="h2-card" style="flex:1;">
+            <div class="h2-card-head"><span>📦 Groceries — Costco</span></div>
+            <div class="h2-card-body" id="h2g-costco"></div>
+          </div>
+        </div>
+
+        <div class="h2-col">
+          <div class="h2-card">
+            <div class="h2-card-head"><span>⛅ Weather — Weekly</span></div>
+            <div class="h2-card-body h2-wx-body" id="h2WxDays"></div>
+          </div>
+          <div class="h2-card" style="flex:1;">
+            <div class="h2-card-head"><span>🗓️ Chores — Appts</span></div>
+            <div class="h2-card-body" id="h2c-appt"></div>
+          </div>
+          <div class="h2-card" style="flex:1;">
+            <div class="h2-card-head"><span>🏠 Chores — Household</span></div>
+            <div class="h2-card-body" id="h2c-household"></div>
+          </div>
+        </div>
+
+        <div class="h2-col">
+          <div class="h2-card" style="flex:1;">
+            <div class="h2-card-head">
+              <span>📈 Markets Watchlist</span>
+              <button class="h2-today" data-goto="ticker">Edit</button>
+            </div>
+            <div class="h2-card-body h2-watchlist-body" id="h2WatchlistBody"></div>
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -529,6 +680,20 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
         <h2 class="title" style="margin:0;">Markets</h2>
         <button class="btn ghost" id="tickerRetry">↻ Retry</button>
       </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="row between" style="margin-bottom:10px;">
+          <b>📈 Watchlist</b>
+          <span class="hint">Shown on Home 2's watchlist card. Prices need the trading server, same as Open Trades below.</span>
+        </div>
+        <div class="row" style="margin-bottom:10px;">
+          <input type="text" id="watchlistInput" placeholder="Add a ticker, e.g. AAPL" autocomplete="off" style="flex:1; min-height:44px; border-radius:12px; border:1px solid var(--line); background:var(--panel2); color:var(--tx); padding:0 12px; text-transform:uppercase;">
+          <button class="btn primary" id="watchlistAdd">Add</button>
+        </div>
+        <div class="wl-chips" id="watchlistChips"></div>
+      </div>
+
+      <h3 style="margin:0 0 10px; font-size:15px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em;">Open Trades</h3>
       <div id="tickerHost"></div>
     </section>
 
@@ -540,6 +705,10 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
       </div>
       <div class="addbar" id="addbarWrap">
         <input id="listInput" type="text" placeholder="Add a chore…" autocomplete="off">
+        <span class="segbtn" style="flex:0 0 auto;">
+          <button data-add-cat="household" class="active">🏠 Household</button>
+          <button data-add-cat="appt">🗓️ Appt</button>
+        </span>
         <button class="btn primary" id="listAdd">Add</button>
       </div>
       <div class="card" id="listBody"></div>

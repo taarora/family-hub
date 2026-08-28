@@ -103,8 +103,8 @@ document.getElementById("dimOverlay").addEventListener("click", (e)=>{
 });
 
 /* -------------------------------------------------- 3. NAV + ROTATION ---- */
-const ALL_SCREENS = ["home","calendar","weather","ticker","list","recipes","settings"];
-const ROTATABLE = ["home","calendar","weather","ticker","list","recipes"];
+const ALL_SCREENS = ["home","home2","calendar","weather","ticker","list","recipes","settings"];
+const ROTATABLE = ["home","home2","calendar","weather","ticker","list","recipes"];
 let currentScreen = "home";
 let rotTimer = null, idleResumeTimer = null, rotPaused = false;
 
@@ -120,10 +120,11 @@ function goto(screen){
   document.querySelectorAll(".navbtn").forEach(b=>b.classList.toggle("active", b.dataset.screen === screen));
   if(screen === "calendar") renderCalendar();
   if(screen === "weather") renderWeather();
-  if(screen === "ticker") renderTicker();
+  if(screen === "ticker"){ renderTicker(); renderMarketsWatchlist(); }
   if(screen === "list") renderList();
   if(screen === "recipes") renderRecipes();
   if(screen === "home") renderHome();
+  if(screen === "home2") renderHome2();
 }
 
 function renderNavVisibility(){
@@ -252,6 +253,11 @@ function makeFirestoreStore(collectionName){
 
 let itemsStore = makeLocalStore("hub_items_local");
 let recipesStore = makeLocalStore("hub_recipes_local");
+// Family-hub's own ticker watchlist — deliberately separate from the trading
+// project's real watchlist.json (favourites/tickers there drive live scan and
+// concentration-cap logic; this is just "which symbols show on the kitchen
+// screen" and has no business touching that). {id, ticker, createdAt}.
+let watchlistStore = makeLocalStore("hub_watchlist_local");
 
 // If this device ever operated in local-only mode (Firebase not configured,
 // or misconfigured) while items/recipes were added, those additions are
@@ -289,8 +295,10 @@ function initFirebase(){
     txt.textContent = "Not connected — running on this device only";
     itemsStore = makeLocalStore("hub_items_local");
     recipesStore = makeLocalStore("hub_recipes_local");
+    watchlistStore = makeLocalStore("hub_watchlist_local");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
+    watchlistStore.subscribe(renderAllWatchlistViews);
     return;
   }
   try{
@@ -301,24 +309,30 @@ function initFirebase(){
     }
     itemsStore = makeFirestoreStore("items");
     recipesStore = makeFirestoreStore("recipes");
+    watchlistStore = makeFirestoreStore("watchlist");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
+    watchlistStore.subscribe(renderAllWatchlistViews);
     dot.className = "statusdot ok";
     txt.textContent = "Connected — syncing live across devices";
     fbReady = true;
     mergeLocalIntoFirestore("hub_items_local", "items", d=>((d.text||"")+"|"+(d.tag||"")).trim().toLowerCase());
     mergeLocalIntoFirestore("hub_recipes_local", "recipes", d=>(d.title||"").trim().toLowerCase());
+    mergeLocalIntoFirestore("hub_watchlist_local", "watchlist", d=>(d.ticker||"").trim().toUpperCase());
   }catch(e){
     console.warn("Firebase init failed", e);
     dot.className = "statusdot bad";
     txt.textContent = "Couldn't connect — check your config values";
     itemsStore = makeLocalStore("hub_items_local");
     recipesStore = makeLocalStore("hub_recipes_local");
+    watchlistStore = makeLocalStore("hub_watchlist_local");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
+    watchlistStore.subscribe(renderAllWatchlistViews);
   }
 }
-function renderAllListViews(){ renderList(); renderHome(); }
+function renderAllListViews(){ renderList(); renderHome(); if(currentScreen==="home2") renderHome2(); }
+function renderAllWatchlistViews(){ renderMarketsWatchlist(); if(currentScreen==="home2") renderH2Watchlist(); }
 
 /* ------------------------------------------------------- 5. CALENDAR ---- */
 let calEvents = [];       // flattened, expanded occurrences within a working window
@@ -818,19 +832,23 @@ function normalizeWallUrl(raw){
   return /^https?:\/\//i.test(s) ? s : "http://" + s;
 }
 // The Settings field just needs "your trading app's address" (whatever the
-// user already had pointed at wall.html, or a bare host:port). The Markets
-// tab itself always loads open-cards.html — the read-only trade-card kiosk
-// page, same server, same static folder — so swap in that filename off the
-// same origin regardless of what path was actually typed/saved.
-function openCardsUrl(raw){
+// user already had pointed at wall.html, or a bare host:port). Everything
+// this Hub embeds from the trading server (Open Trades cards, the watchlist
+// widget) lives as its own static file at that same origin, so every embed
+// just needs the origin, not the exact path the user typed/saved.
+function tradingOrigin(raw){
   const url = normalizeWallUrl(raw);
-  if(!url) return url;
-  try{
-    const u = new URL(url);
-    return u.origin + "/open-cards.html";
-  }catch(e){
-    return url;
-  }
+  if(!url) return null;
+  try{ return new URL(url).origin; }catch(e){ return null; }
+}
+function openCardsUrl(raw){
+  const origin = tradingOrigin(raw);
+  return origin ? origin + "/open-cards.html" : normalizeWallUrl(raw);
+}
+function watchlistWidgetUrl(raw, tickers){
+  const origin = tradingOrigin(raw);
+  if(!origin) return null;
+  return origin + "/watchlist-widget.html?t=" + encodeURIComponent(tickers.join(","));
 }
 async function reachable(url, timeoutMs=2500){
   try{
@@ -841,11 +859,18 @@ async function reachable(url, timeoutMs=2500){
     return true;
   }catch(e){ return false; }
 }
-async function renderTicker(){
-  const host = document.getElementById("tickerHost");
-  const url = openCardsUrl(CFG.wallUrl);
+// Shared by every iframe embed of the trading server (Open Trades cards on
+// the Markets tab, the Watchlist card on Home 2): same mixed-content check,
+// same reachability check, same "open externally" fallback — written once so
+// the two never quietly drift into different behavior for the same failure.
+async function renderTradingEmbed(host, url, opts){
+  const o = opts || {};
+  const emptyMsg = o.emptyMsg || "No trading server address set.";
+  const offMsg = o.offMsg || "Isn't reachable.";
+  const compact = !!o.compact;
+  const big = compact ? "" : `<div class="big">📈</div>`;
   if(!url){
-    host.innerHTML = `<div class="ticker-off"><div class="big">📈</div><div>No trading server address set.</div><div class="hint">Add your trading app's network address in Settings.</div></div>`;
+    host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">${big}<div>${escapeHtml(emptyMsg)}</div>${compact?'':'<div class="hint">Add your trading app\'s network address in Settings.</div>'}</div>`;
     return;
   }
   // A page served securely (https, e.g. GitHub Pages) can't embed a plain-http
@@ -853,38 +878,101 @@ async function renderTicker(){
   // Wi-Fi. It's not a reachability problem, so don't pretend a retry will fix
   // it; hand off to Safari instead, which loads the plain-http link directly.
   if(location.protocol === "https:" && /^http:\/\//i.test(url)){
-    host.innerHTML = `<div class="ticker-off">
-      <div class="big">🔒</div>
-      <div>Can't embed this inside the Hub.</div>
-      <div class="hint">This Hub loads securely (https), but your Markets link is plain http (${escapeHtml(url)}) — browsers block mixing the two, even on your home Wi-Fi. Opening it in Safari works fine instead.</div>
-      <button class="btn primary" id="tickerOpenExternal" style="margin-top:6px;">Open Markets in Safari ↗</button>
+    host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">
+      ${compact ? '<div class="big" style="font-size:22px;">🔒</div>' : '<div class="big">🔒</div>'}
+      <div>Can't embed this here.</div>
+      ${compact ? '' : `<div class="hint">This Hub loads securely (https), but your Markets link is plain http (${escapeHtml(url)}) — browsers block mixing the two, even on your home Wi-Fi. Opening it in Safari works fine instead.</div>`}
+      <button class="btn ${compact?'ghost':'primary'} embed-open-ext" style="margin-top:6px;">Open in Safari ↗</button>
     </div>`;
-    document.getElementById("tickerOpenExternal").addEventListener("click", ()=>{ window.open(url, "_blank"); });
+    host.querySelector(".embed-open-ext").addEventListener("click", ()=>{ window.open(url, "_blank"); });
     return;
   }
-  host.innerHTML = `<div class="ticker-off"><div class="big">⏳</div><div>Checking connection…</div></div>`;
+  if(!compact) host.innerHTML = `<div class="ticker-off"><div class="big">⏳</div><div>Checking connection…</div></div>`;
   const ok = await reachable(url);
   if(!ok){
-    host.innerHTML = `<div class="ticker-off"><div class="big">📴</div><div>Open Trades page isn't reachable.</div>
-      <div class="hint">Make sure your Mac and the trading server are on, and this device is on the same Wi-Fi as ${escapeHtml(url)}.</div></div>`;
+    host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">${compact?'':'<div class="big">📴</div>'}<div>${escapeHtml(offMsg)}</div>${compact?'':`<div class="hint">Make sure your Mac and the trading server are on, and this device is on the same Wi-Fi as ${escapeHtml(url)}.</div>`}</div>`;
     return;
   }
-  host.innerHTML = `<iframe id="tickerFrame" src="${escapeAttr(url)}"></iframe>`;
+  host.innerHTML = `<iframe class="trading-embed-frame" src="${escapeAttr(url)}"></iframe>`;
+}
+async function renderTicker(){
+  const host = document.getElementById("tickerHost");
+  const url = openCardsUrl(CFG.wallUrl);
+  await renderTradingEmbed(host, url, {offMsg:"Open Trades page isn't reachable."});
 }
 document.getElementById("tickerRetry").addEventListener("click", renderTicker);
+
+/* ------------------------------------------------- 7b. MARKETS WATCHLIST */
+// Editing lives here, on the Markets tab — the "main tab" for anything
+// market-related — same pattern as groceries/chores: add/remove happens in
+// the real tab, Home 2 only ever shows a read-only rollup of it.
+function renderMarketsWatchlist(){
+  const host = document.getElementById("watchlistChips");
+  if(!host) return;
+  const list = [...watchlistStore.list].sort((a,b)=>(a.ticker||"").localeCompare(b.ticker||""));
+  host.innerHTML = list.length ? list.map(w=>`
+    <span class="wl-chip" data-id="${w.id}">${escapeHtml(w.ticker)}<button class="wl-chip-x" data-id="${w.id}" aria-label="Remove ${escapeHtml(w.ticker)}">✕</button></span>
+  `).join("") : `<div class="hint">No tickers yet — add one above to show it on Home 2's watchlist card.</div>`;
+  host.querySelectorAll(".wl-chip-x").forEach(btn=>{
+    btn.addEventListener("click", ()=>watchlistStore.remove(btn.dataset.id));
+  });
+}
+function addWatchlistTicker(){
+  const input = document.getElementById("watchlistInput");
+  const ticker = input.value.trim().toUpperCase();
+  if(!ticker) return;
+  if(watchlistStore.list.some(w=>(w.ticker||"").toUpperCase()===ticker)){
+    toast(ticker + " is already on the watchlist");
+    input.value = "";
+    return;
+  }
+  watchlistStore.add({ticker});
+  input.value = "";
+  input.focus();
+}
+document.getElementById("watchlistAdd").addEventListener("click", addWatchlistTicker);
+document.getElementById("watchlistInput").addEventListener("keydown", (e)=>{
+  if(e.key==="Enter") addWatchlistTicker();
+  e.target.value = e.target.value.toUpperCase();
+});
 
 /* ------------------------------------------------------------ 8. HOME --- */
 let homeStoreFilter = "all";
 let homeDayCursor = (()=>{ const d = new Date(); d.setHours(0,0,0,0); return d; })();
-function checklistRow(item, showDelete, showStore){
+// Chores split into two buckets for the Home 2 layout ("Appts scheduling" vs
+// "Household") — a chore with no category yet (everything added before this
+// existed) is treated as household, so nothing already on the list vanishes
+// from either view.
+const CHORE_CAT_META = {
+  appt:      {label:"Appt",      icon:"🗓️"},
+  household: {label:"Household", icon:"🏠"}
+};
+function checklistRow(item, showDelete, showStore, showCategory){
   const store = showStore && item.tag==="grocery" ? STORE_META[item.store||"wegmans"] : null;
+  const cat = showCategory && item.tag==="todo" ? CHORE_CAT_META[item.category||"household"] : null;
   return `<div class="list-item ${item.done?'done':''}" data-id="${item.id}">
     <div class="check ${item.done?'on':''}">✓</div>
     <div class="list-text">${escapeHtml(item.text)}</div>
     ${store ? `<div class="list-tag">${store.icon} ${escapeHtml(store.label)}</div>` : ''}
+    ${cat ? `<button class="list-tag cat-toggle" data-cat-toggle title="Tap to switch bucket">${cat.icon} ${escapeHtml(cat.label)}</button>` : ''}
     ${showDelete ? '<button class="edit">✏️</button>' : ''}
     ${showDelete ? '<button class="del">✕</button>' : ''}
   </div>`;
+}
+// Tapping a chore's bucket chip flips it between Appt/Household in place —
+// the only "editing" a category needs, so it doesn't warrant a whole picker.
+function wireCategoryToggle(host){
+  host.querySelectorAll("[data-cat-toggle]").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      const row = btn.closest(".list-item");
+      const id = row.dataset.id;
+      const item = itemsStore.list.find(i=>i.id===id);
+      if(!item) return;
+      const next = (item.category||"household")==="household" ? "appt" : "household";
+      itemsStore.update(id, {category: next});
+    });
+  });
 }
 function wireItemEdit(host){
   host.querySelectorAll(".edit").forEach(btn=>{
@@ -1000,6 +1088,123 @@ function wireCheckboxes(root){
   });
 }
 
+/* --------------------------------------------------------- 8b. HOME 2 --- */
+// A second, from-scratch layout for the same data — a colored-header card
+// grid modelled on a fridge-tablet reference the user liked, built to sit
+// side by side with the original Home tab so the two can be compared before
+// deciding whether to keep, replace, or drop either one. Deliberately reuses
+// every existing data source and render helper it can (itemsStore, calEvents,
+// wxCache, watchlistStore, the trading-embed pattern) rather than building a
+// parallel data path — this is a new *view*, not new state, except for its
+// own month/week cursors so paging one Home tab never silently pages the
+// other out from under the person comparing them.
+let home2MonthCursor = new Date();
+let home2WeekCursor = new Date();
+const H2_MONTH_DOT_CAP = 4;
+
+function renderH2Month(){
+  const y = home2MonthCursor.getFullYear(), m = home2MonthCursor.getMonth();
+  const labelEl = document.getElementById("h2MonthLabel");
+  if(labelEl) labelEl.textContent = home2MonthCursor.toLocaleDateString([], {month:"long", year:"numeric"});
+  const headHost = document.getElementById("h2MonthHead");
+  if(headHost && !headHost.childElementCount){
+    headHost.innerHTML = ["S","M","T","W","T","F","S"].map(d=>`<div>${d}</div>`).join("");
+  }
+  const gridHost = document.getElementById("h2MonthGrid");
+  if(!gridHost) return;
+  const gridStart = startOfWeek(new Date(y, m, 1));
+  const today = new Date();
+  let html = "";
+  for(let i=0;i<42;i++){
+    const d = new Date(+gridStart + i*86400000);
+    const otherMonth = d.getMonth() !== m;
+    const dayEvts = calEvents.filter(e=>sameDay(e.occStart,d)).slice(0, H2_MONTH_DOT_CAP);
+    html += `<div class="h2-mday ${otherMonth?'other-month':''} ${sameDay(d,today)?'today':''}">
+      <div class="h2-mnum">${d.getDate()}</div>
+      ${dayEvts.length ? `<div class="h2-mdots">${dayEvts.map(e=>`<span class="h2-dot ${CAT_META[e.cat].cls}"></span>`).join("")}</div>` : ""}
+    </div>`;
+  }
+  gridHost.innerHTML = html;
+}
+function renderH2Week(){
+  const start = startOfWeek(home2WeekCursor);
+  const end = new Date(+start + 6*86400000);
+  const labelEl = document.getElementById("h2WeekLabel");
+  if(labelEl) labelEl.textContent = start.toLocaleDateString([], {month:"short",day:"numeric"}) + " – " + end.toLocaleDateString([], {month:"short",day:"numeric"});
+  const host = document.getElementById("h2WeekBody");
+  if(!host) return;
+  const today = new Date();
+  const weekEvts = calEvents.filter(e => e.occStart >= start && e.occStart < new Date(+end+86400000));
+  if(!weekEvts.length){ host.innerHTML = `<div class="empty">Nothing scheduled this week.</div>`; return; }
+  const byDay = new Map();
+  weekEvts.forEach(e=>{
+    const key = e.occStart.toDateString();
+    if(!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(e);
+  });
+  let html = "";
+  for(const [key, evts] of byDay){
+    const d = new Date(key);
+    const label = sameDay(d, today) ? "Today" : d.toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"});
+    html += `<div class="h2-day-label">${label}</div>` + evts.map(evtHtml).join("");
+  }
+  host.innerHTML = html;
+}
+function h2ChecklistHost(hostId, filterFn){
+  const host = document.getElementById(hostId);
+  if(!host) return;
+  const items = itemsStore.list.filter(filterFn);
+  host.innerHTML = items.length ? items.map(i=>checklistRow(i,false)).join("") : `<div class="empty">All clear 🎉</div>`;
+  wireCheckboxes(host);
+}
+function renderH2Grocery(){
+  STORE_ORDER.forEach(s=>{
+    h2ChecklistHost("h2g-"+s, i=>i.tag==="grocery" && !i.done && (i.store||"wegmans")===s);
+  });
+}
+function renderH2Chores(){
+  h2ChecklistHost("h2c-appt",      i=>i.tag==="todo" && !i.done && (i.category||"household")==="appt");
+  h2ChecklistHost("h2c-household", i=>i.tag==="todo" && !i.done && (i.category||"household")==="household");
+}
+function renderH2Weather(){
+  const host = document.getElementById("h2WxDays");
+  if(!host) return;
+  if(!wxCache){ host.innerHTML = `<div class="empty">Set your location in Settings.</div>`; return; }
+  const days = wxCache.daily.time.map((t,i)=>({
+    date:new Date(t), hi:wxCache.daily.temperature_2m_max[i], lo:wxCache.daily.temperature_2m_min[i], code:wxCache.daily.weather_code[i]
+  })).slice(0,7);
+  host.innerHTML = days.map(d=>`
+    <div class="wx-day">
+      <div class="d">${d.date.toLocaleDateString([], {weekday:"short"})}</div>
+      <div class="ic">${wmoIcon(d.code)}</div>
+      <div class="hl">${Math.round(d.hi)}° <span class="lo">${Math.round(d.lo)}°</span></div>
+    </div>`).join("");
+}
+async function renderH2Watchlist(){
+  const host = document.getElementById("h2WatchlistBody");
+  if(!host) return;
+  const tickers = watchlistStore.list.map(w=>w.ticker).filter(Boolean);
+  if(!tickers.length){
+    host.innerHTML = `<div class="ticker-off compact"><div>No tickers yet.</div><div class="hint">Add some from the Markets tab.</div></div>`;
+    return;
+  }
+  const url = watchlistWidgetUrl(CFG.wallUrl, tickers);
+  await renderTradingEmbed(host, url, {compact:true, emptyMsg:"No trading server address set.", offMsg:"Not reachable right now."});
+}
+function renderHome2(){
+  renderH2Month();
+  renderH2Week();
+  renderH2Grocery();
+  renderH2Chores();
+  renderH2Weather();
+  renderH2Watchlist();
+}
+document.getElementById("h2MonthPrev")?.addEventListener("click", ()=>{ home2MonthCursor = new Date(home2MonthCursor.getFullYear(), home2MonthCursor.getMonth()-1, 1); renderH2Month(); });
+document.getElementById("h2MonthNext")?.addEventListener("click", ()=>{ home2MonthCursor = new Date(home2MonthCursor.getFullYear(), home2MonthCursor.getMonth()+1, 1); renderH2Month(); });
+document.getElementById("h2WeekPrev")?.addEventListener("click", ()=>{ home2WeekCursor = new Date(+home2WeekCursor - 7*86400000); renderH2Week(); });
+document.getElementById("h2WeekNext")?.addEventListener("click", ()=>{ home2WeekCursor = new Date(+home2WeekCursor + 7*86400000); renderH2Week(); });
+document.getElementById("h2WeekToday")?.addEventListener("click", ()=>{ home2WeekCursor = new Date(); renderH2Week(); });
+
 /* ------------------------------------------------------------ LIST ----- */
 let listFilter = "todo";
 document.querySelectorAll(".segbtn [data-list]").forEach(btn=>{
@@ -1062,9 +1267,10 @@ function renderList(){
     const host = document.getElementById("listBody");
     let items = itemsStore.list.filter(i=>i.tag==="todo");
     items = [...items].sort((a,b)=>(a.done?1:0)-(b.done?1:0));
-    host.innerHTML = items.length ? items.map(i=>checklistRow(i,true)).join("") : `<div class="empty">Nothing here yet — add something above.</div>`;
+    host.innerHTML = items.length ? items.map(i=>checklistRow(i,true,false,true)).join("") : `<div class="empty">Nothing here yet — add something above.</div>`;
     wireCheckboxes(host);
     wireItemEdit(host);
+    wireCategoryToggle(host);
     host.querySelectorAll(".del").forEach(btn=>{
       btn.addEventListener("click", ()=>{
         itemsStore.remove(btn.closest(".list-item").dataset.id);
@@ -1074,11 +1280,18 @@ function renderList(){
     renderGroceryColumns();
   }
 }
+let addChoreCategory = "household";
+document.querySelectorAll("#addbarWrap [data-add-cat]").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    addChoreCategory = btn.dataset.addCat;
+    document.querySelectorAll("#addbarWrap [data-add-cat]").forEach(b=>b.classList.toggle("active", b===btn));
+  });
+});
 function addListItem(){
   const input = document.getElementById("listInput");
   const text = input.value.trim();
   if(!text) return;
-  itemsStore.add({text, tag:"todo", done:false});
+  itemsStore.add({text, tag:"todo", done:false, category:addChoreCategory});
   input.value = "";
   input.focus();
 }
@@ -1266,10 +1479,10 @@ function boot(){
   renderRotDots();
   buildGroceryColumnsShell();
   initFirebase();
-  loadCalendar().then(()=>{ renderCalendar(); renderHome(); });
-  renderWeather();
-  setInterval(()=>loadCalendar().then(()=>{ if(currentScreen==="calendar") renderCalendar(); renderHome(); }), 15*60*1000);
-  setInterval(renderWeather, 30*60*1000);
+  loadCalendar().then(()=>{ renderCalendar(); renderHome(); renderHome2(); });
+  renderWeather().then(renderHome2);
+  setInterval(()=>loadCalendar().then(()=>{ if(currentScreen==="calendar") renderCalendar(); renderHome(); renderHome2(); }), 15*60*1000);
+  setInterval(()=>{ renderWeather().then(renderHome2); }, 30*60*1000);
   setInterval(renderNavVisibility, 5*60*1000);
   startRotation();
   goto("home");
