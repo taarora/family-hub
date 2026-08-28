@@ -113,6 +113,8 @@ Your ticker heatmap already exists in the trading project (`web/wall.html`) and 
 4. The Markets tab now shows it live whenever your Mac + server are on and your other device is on the same Wi-Fi. If not reachable, it shows a clear "offline" message instead of a blank screen.
 5. Weekends: the Markets tab is hidden from navigation and rotation automatically (toggle this in Settings if you ever want it back).
 
+**Heads up if the Hub is installed from the GitHub Pages URL** (the recommended path in step 1): that URL loads over `https`, but your trading server is plain `http`. Browsers block a secure page from embedding an insecure one ("mixed content") — it's not a reachability issue and retrying won't fix it, so the Markets tab instead shows an **"Open Markets in Safari"** button that hands off to a normal browser tab, where it loads fine. If you ever want it truly embedded in-app instead, the trading server would need to run over `https` too (a self-signed cert trusted on each device) — ask if you want help setting that up.
+
 ---
 
 ## 6. Screen rotation, dark/light, night dimming

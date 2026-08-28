@@ -755,18 +755,33 @@ async function reachable(url, timeoutMs=2500){
 }
 async function renderTicker(){
   const host = document.getElementById("tickerHost");
-  if(!CFG.wallUrl.trim()){
+  const url = CFG.wallUrl.trim();
+  if(!url){
     host.innerHTML = `<div class="ticker-off"><div class="big">📈</div><div>No ticker wall URL set.</div><div class="hint">Add your trading app's network address in Settings.</div></div>`;
     return;
   }
-  host.innerHTML = `<div class="ticker-off"><div class="big">⏳</div><div>Checking connection…</div></div>`;
-  const ok = await reachable(CFG.wallUrl.trim());
-  if(!ok){
-    host.innerHTML = `<div class="ticker-off"><div class="big">📴</div><div>Ticker wall isn't reachable.</div>
-      <div class="hint">Make sure your Mac and the trading server are on, and this device is on the same Wi-Fi as ${escapeHtml(CFG.wallUrl)}.</div></div>`;
+  // A page served securely (https, e.g. GitHub Pages) can't embed a plain-http
+  // page — browsers block that "mixed content" outright, even on your own
+  // Wi-Fi. It's not a reachability problem, so don't pretend a retry will fix
+  // it; hand off to Safari instead, which loads the plain-http link directly.
+  if(location.protocol === "https:" && /^http:\/\//i.test(url)){
+    host.innerHTML = `<div class="ticker-off">
+      <div class="big">🔒</div>
+      <div>Can't embed this inside the Hub.</div>
+      <div class="hint">This Hub loads securely (https), but your Markets link is plain http (${escapeHtml(url)}) — browsers block mixing the two, even on your home Wi-Fi. Opening it in Safari works fine instead.</div>
+      <button class="btn primary" id="tickerOpenExternal" style="margin-top:6px;">Open Markets in Safari ↗</button>
+    </div>`;
+    document.getElementById("tickerOpenExternal").addEventListener("click", ()=>{ window.open(url, "_blank"); });
     return;
   }
-  host.innerHTML = `<iframe id="tickerFrame" src="${escapeAttr(CFG.wallUrl.trim())}"></iframe>`;
+  host.innerHTML = `<div class="ticker-off"><div class="big">⏳</div><div>Checking connection…</div></div>`;
+  const ok = await reachable(url);
+  if(!ok){
+    host.innerHTML = `<div class="ticker-off"><div class="big">📴</div><div>Ticker wall isn't reachable.</div>
+      <div class="hint">Make sure your Mac and the trading server are on, and this device is on the same Wi-Fi as ${escapeHtml(url)}.</div></div>`;
+    return;
+  }
+  host.innerHTML = `<iframe id="tickerFrame" src="${escapeAttr(url)}"></iframe>`;
 }
 document.getElementById("tickerRetry").addEventListener("click", renderTicker);
 
