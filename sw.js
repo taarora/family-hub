@@ -1,11 +1,21 @@
 /* Family Hub — service worker
    Caches the app shell only (this HTML, CSS-in-file, JS, icons, manifest) so
-   the dashboard chrome loads instantly and works if the network blips.
-   Everything that actually needs to be live — calendar ICS, weather,
-   Firestore, the ticker wall — is fetched fresh over the network and is
-   deliberately NOT cached here, otherwise "offline" would mean "stale". */
+   the dashboard still works if the network blips. Everything that actually
+   needs to be live — calendar ICS, weather, Firestore, the ticker wall — is
+   fetched fresh over the network and is deliberately NOT cached here,
+   otherwise "offline" would mean "stale".
 
-const CACHE = "family-hub-shell-v1";
+   Strategy: network-first for the shell files, falling back to cache only
+   when the network fails. This is a dashboard that's normally on Wi-Fi, so
+   freshness matters more than instant-from-cache speed — a network-first
+   shell means one app reopen after a deploy is enough to see the update,
+   rather than needing two (which a cache-first/stale-while-revalidate
+   strategy would require: the first reopen serves the old cached copy while
+   quietly refreshing it in the background, and only the second reopen would
+   actually show it). Bump CACHE's version suffix whenever this strategy or
+   the SHELL list changes, so old cached entries get swept on activate. */
+
+const CACHE = "family-hub-shell-v2";
 const SHELL = ["./", "./index.html", "./app.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (evt) => {
@@ -25,12 +35,9 @@ self.addEventListener("fetch", (evt) => {
   if (!isShellFile) return; // let everything else (APIs, iframe, CDN scripts) go straight to the network
 
   evt.respondWith(
-    caches.match(evt.request).then(cached => {
-      const network = fetch(evt.request).then(resp => {
-        caches.open(CACHE).then(c => c.put(evt.request, resp.clone()));
-        return resp;
-      }).catch(() => cached);
-      return cached || network;
-    })
+    fetch(evt.request).then(resp => {
+      caches.open(CACHE).then(c => c.put(evt.request, resp.clone()));
+      return resp;
+    }).catch(() => caches.match(evt.request))
   );
 });
