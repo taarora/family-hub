@@ -254,6 +254,7 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .gcol-add button{min-height:40px; width:40px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--tx); font-weight:800; font-size:17px; cursor:pointer;}
 .gcol-list .list-item{padding:7px 2px;}
 .gcol-list .list-item .del{width:30px; height:30px; font-size:14px;}
+.gcol-list .list-item .edit{width:30px; height:30px; font-size:12px;}
 
 /* ---------------------------------------------------------- CALENDAR --- */
 .viewtabs{display:flex; gap:8px; margin-bottom:14px;}
@@ -337,6 +338,8 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .segbtn button.active{background:var(--panel); color:var(--tx); box-shadow:var(--shadow);}
 .swipehint{font-size:12px; color:var(--faint); margin:2px 0 10px;}
 .list-item .del{width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--bad); font-size:16px; flex-shrink:0;}
+.list-item .edit{width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--dim); font-size:14px; flex-shrink:0; cursor:pointer;}
+.edit-input{flex:1; min-width:0; font-size:15px; font-weight:600; font-family:inherit; border:1px solid var(--accent); border-radius:8px; background:var(--panel2); color:var(--tx); padding:5px 8px;}
 
 /* --------------------------------------------------------- RECIPES ----- */
 #recipeSearch{width:100%; min-height:var(--touch); border-radius:14px; border:1px solid var(--line); background:var(--panel2); color:var(--tx); padding:0 14px; font-size:16px; margin-bottom:14px;}
@@ -658,7 +661,9 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
           <button class="btn primary" id="settingsSave">Save Settings</button>
           <button class="btn ghost" id="settingsExport">Export Config</button>
           <button class="btn ghost" id="settingsImport">Import Config</button>
+          <button class="btn ghost" id="settingsBackup">⬇ Backup Data</button>
         </div>
+        <div class="hint" style="margin-top:8px;">Backup Data downloads a snapshot of your chores, groceries and recipes as a JSON file — save it into a synced folder (e.g. iCloud Drive) so it's there if something ever goes wrong with sync.</div>
         <div class="hint" style="margin-top:10px;">Export/Import lets you copy this setup to your other devices in one paste instead of retyping everything.</div>
       </div>
     </section>

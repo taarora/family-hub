@@ -253,6 +253,35 @@ function makeFirestoreStore(collectionName){
 let itemsStore = makeLocalStore("hub_items_local");
 let recipesStore = makeLocalStore("hub_recipes_local");
 
+// If this device ever operated in local-only mode (Firebase not configured,
+// or misconfigured) while items/recipes were added, those additions are
+// stranded in this browser's localStorage — the app has no way to know they
+// exist once it switches back to a Firestore-backed store. Sweep them into
+// Firestore the moment a connection succeeds so nothing added offline is
+// silently lost. Safe to call repeatedly — it dedupes against what's already
+// in Firestore and only clears the local cache after a successful merge.
+async function mergeLocalIntoFirestore(localKey, collectionName, keyFn){
+  try{
+    const raw = localStorage.getItem(localKey);
+    if(!raw) return;
+    const local = JSON.parse(raw);
+    if(!Array.isArray(local) || !local.length) return;
+    const col = fbDb.collection("families").doc(CFG.firebase.familyId).collection(collectionName);
+    const snap = await col.get();
+    const existing = new Set(snap.docs.map(d=>keyFn(d.data())));
+    let merged = 0;
+    for(const entry of local){
+      if(existing.has(keyFn(entry))) continue;
+      const {id, ...data} = entry;
+      await col.doc(id).set({...data, createdAt: data.createdAt || Date.now()});
+      merged++;
+    }
+    if(merged) toast(`Recovered ${merged} item${merged===1?'':'s'} saved while offline`);
+    localStorage.removeItem(localKey);
+  }catch(e){
+    console.warn("Local→Firestore merge failed for "+collectionName, e);
+  }
+}
 function initFirebase(){
   const dot = document.getElementById("fbStatusDot"), txt = document.getElementById("fbStatusText");
   if(!firebaseConfigured()){
@@ -277,6 +306,8 @@ function initFirebase(){
     dot.className = "statusdot ok";
     txt.textContent = "Connected — syncing live across devices";
     fbReady = true;
+    mergeLocalIntoFirestore("hub_items_local", "items", d=>((d.text||"")+"|"+(d.tag||"")).trim().toLowerCase());
+    mergeLocalIntoFirestore("hub_recipes_local", "recipes", d=>(d.title||"").trim().toLowerCase());
   }catch(e){
     console.warn("Firebase init failed", e);
     dot.className = "statusdot bad";
@@ -836,8 +867,37 @@ function checklistRow(item, showDelete, showStore){
     <div class="check ${item.done?'on':''}">✓</div>
     <div class="list-text">${escapeHtml(item.text)}</div>
     ${store ? `<div class="list-tag">${store.icon} ${escapeHtml(store.label)}</div>` : ''}
+    ${showDelete ? '<button class="edit">✏️</button>' : ''}
     ${showDelete ? '<button class="del">✕</button>' : ''}
   </div>`;
+}
+function wireItemEdit(host){
+  host.querySelectorAll(".edit").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      const row = btn.closest(".list-item");
+      const id = row.dataset.id;
+      const current = itemsStore.list.find(i=>i.id===id);
+      const textEl = row.querySelector(".list-text");
+      if(!current || !textEl || row.querySelector(".edit-input")) return;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "edit-input";
+      input.value = current.text;
+      textEl.replaceWith(input);
+      input.focus();
+      input.select();
+      input.addEventListener("keydown", ev=>{
+        if(ev.key==="Enter"){ ev.preventDefault(); input.blur(); }
+        else if(ev.key==="Escape"){ input.value = current.text; input.blur(); }
+      });
+      input.addEventListener("blur", ()=>{
+        const val = input.value.trim();
+        if(val && val !== current.text) itemsStore.update(id, {text: val});
+        else renderAllListViews();
+      });
+    });
+  });
 }
 function catCounts(days){
   const now = new Date();
@@ -970,6 +1030,7 @@ function renderGroceryColumns(){
     items = [...items].sort((a,b)=>(a.done?1:0)-(b.done?1:0));
     host.innerHTML = items.length ? items.map(i=>checklistRow(i,true)).join("") : `<div class="empty" style="padding:12px 4px;">Nothing yet.</div>`;
     wireCheckboxes(host);
+    wireItemEdit(host);
     host.querySelectorAll(".del").forEach(btn=>{
       btn.addEventListener("click", ()=>{
         itemsStore.remove(btn.closest(".list-item").dataset.id);
@@ -988,6 +1049,7 @@ function renderList(){
     items = [...items].sort((a,b)=>(a.done?1:0)-(b.done?1:0));
     host.innerHTML = items.length ? items.map(i=>checklistRow(i,true)).join("") : `<div class="empty">Nothing here yet — add something above.</div>`;
     wireCheckboxes(host);
+    wireItemEdit(host);
     host.querySelectorAll(".del").forEach(btn=>{
       btn.addEventListener("click", ()=>{
         itemsStore.remove(btn.closest(".list-item").dataset.id);
@@ -1136,6 +1198,25 @@ document.getElementById("settingsExport").addEventListener("click", async ()=>{
     const ta = document.createElement("textarea"); ta.value = json; document.body.appendChild(ta); ta.select();
     document.execCommand("copy"); ta.remove(); toast("Config copied to clipboard");
   }
+});
+document.getElementById("settingsBackup").addEventListener("click", ()=>{
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    config: CFG,
+    items: itemsStore.list,
+    recipes: recipesStore.list
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `family-hub-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast("Backup downloaded");
 });
 document.getElementById("settingsImport").addEventListener("click", ()=>{ document.getElementById("importModalBack").hidden = false; });
 document.getElementById("importCancel").addEventListener("click", ()=>{ document.getElementById("importModalBack").hidden = true; });
