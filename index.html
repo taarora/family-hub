@@ -151,6 +151,17 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .home-panel .hp-head h3{margin:0; font-size:17px; flex:1;}
 .home-panel .hp-head .chev{color:var(--faint); font-size:18px;}
 .home-panel .hp-body{overflow-y:auto; flex:1;}
+.hp-title-link{cursor:pointer;}
+.hp-today{
+  min-height:30px; padding:0 10px; border-radius:10px; border:1px solid var(--line);
+  background:var(--panel2); color:var(--faint); font-weight:800; font-size:11.5px; cursor:pointer; flex-shrink:0;
+}
+.hp-today:active{transform:scale(.96);}
+.chev-btn{
+  color:var(--faint); font-size:20px; background:none; border:none; cursor:pointer;
+  padding:2px 4px; flex-shrink:0; line-height:1;
+}
+.chev-btn:active{transform:scale(.9);}
 
 .agenda-item{
   display:flex; align-items:flex-start; gap:12px; padding:10px 6px; border-bottom:1px solid var(--line);
@@ -183,7 +194,7 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .check.on{background:var(--good); border-color:var(--good); color:#06210f;}
 .list-text{flex:1; font-size:15px; font-weight:600;}
 .list-item.done .list-text{color:var(--faint); text-decoration:line-through;}
-.list-tag{font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; color:var(--dim); border:1px solid var(--line);}
+.list-tag{font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; color:var(--dim); border:1px solid var(--line); flex-shrink:0; white-space:nowrap;}
 .empty{color:var(--faint); font-size:14px; padding:20px 6px; text-align:center;}
 
 /* ----------------------------------------------------- HOME · calendar -- */
@@ -262,6 +273,29 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .wevt{
   font-size:11.5px; font-weight:700; padding:4px 6px; border-radius:7px; margin-bottom:4px;
   background:color-mix(in srgb, currentColor 16%, var(--panel2)); border-left:3px solid currentColor;
+}
+
+#monthHead{display:grid; grid-template-columns:repeat(7,1fr); gap:8px; margin-bottom:6px;}
+#monthHead div{text-align:center; font-size:11px; font-weight:800; color:var(--faint); text-transform:uppercase; letter-spacing:.04em;}
+#monthGrid{display:grid; grid-template-columns:repeat(7,1fr); gap:8px;}
+.mday{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm);
+  padding:6px; min-height:84px; display:flex; flex-direction:column;
+}
+.mday.other-month{opacity:.4;}
+.mday.today{border-color:var(--accent);}
+.mday .md-num{font-size:12.5px; font-weight:800; margin-bottom:4px;}
+.mday.today .md-num{color:var(--accent);}
+.mevt{
+  font-size:10.5px; font-weight:700; padding:2px 5px; border-radius:5px; margin-bottom:2px;
+  background:color-mix(in srgb, currentColor 16%, var(--panel2)); border-left:2px solid currentColor;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.md-more{font-size:10px; color:var(--faint); font-weight:700; margin-top:1px;}
+@media (max-width: 760px){
+  .mday{min-height:56px;}
+  .mday .md-num{font-size:11px;}
+  #monthHead div{font-size:9.5px;}
 }
 
 #dayTimeline{position:relative;}
@@ -398,9 +432,10 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
       <div class="home-grid">
         <div class="home-col">
           <div class="home-panel">
-            <div class="hp-head" data-goto="calendar">
-              <h3>📅 This Week</h3>
-              <span class="chev">›</span>
+            <div class="hp-head" style="cursor:default;">
+              <h3 class="hp-title-link" data-goto="calendar">📅 This Week</h3>
+              <button class="hp-today" id="homeWeekToday">Today</button>
+              <button class="chev-btn" id="homeWeekNext" aria-label="Next week">›</button>
             </div>
             <div class="cat-pillrow" id="homeCatPills"></div>
             <div class="hp-body">
@@ -444,6 +479,7 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
         <button class="btn active" data-view="schedule">Schedule</button>
         <button class="btn" data-view="daily">Daily</button>
         <button class="btn" data-view="weekly">Weekly</button>
+        <button class="btn" data-view="monthly">Monthly</button>
       </div>
       <div id="calSchedule"></div>
       <div id="calDaily" style="display:none;">
@@ -461,6 +497,15 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
           <button class="btn ghost" id="weekNext">Next ›</button>
         </div>
         <div id="weekGrid"></div>
+      </div>
+      <div id="calMonthly" style="display:none;">
+        <div class="row between" style="margin-bottom:10px;">
+          <button class="btn ghost" id="monthPrev">‹ Prev</button>
+          <b id="monthLabel"></b>
+          <button class="btn ghost" id="monthNext">Next ›</button>
+        </div>
+        <div id="monthHead"></div>
+        <div id="monthGrid"></div>
       </div>
     </section>
 

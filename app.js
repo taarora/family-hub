@@ -294,6 +294,7 @@ let calEvents = [];       // flattened, expanded occurrences within a working wi
 let calRawEvents = [];    // raw parsed VEVENTs (unexpanded)
 let calDayCursor = new Date();
 let calWeekCursor = new Date();
+let calMonthCursor = new Date();
 let calView = "schedule";
 
 function unfoldICS(text){
@@ -599,11 +600,37 @@ function renderWeeklyView(){
   }
   host.innerHTML = html;
 }
+const MONTH_DAY_EVT_CAP = 3;
+function renderMonthlyView(){
+  const y = calMonthCursor.getFullYear(), m = calMonthCursor.getMonth();
+  document.getElementById("monthLabel").textContent = calMonthCursor.toLocaleDateString([], {month:"long", year:"numeric"});
+  const headHost = document.getElementById("monthHead");
+  if(!headHost.childElementCount){
+    headHost.innerHTML = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=>`<div>${d}</div>`).join("");
+  }
+  const gridStart = startOfWeek(new Date(y, m, 1));
+  const today = new Date();
+  let html = "";
+  for(let i=0;i<42;i++){
+    const d = new Date(+gridStart + i*86400000);
+    const otherMonth = d.getMonth() !== m;
+    const dayEvts = calEvents.filter(e=>sameDay(e.occStart,d));
+    const shown = dayEvts.slice(0, MONTH_DAY_EVT_CAP);
+    const extra = dayEvts.length - shown.length;
+    html += `<div class="mday ${otherMonth?'other-month':''} ${sameDay(d,today)?'today':''}">
+      <div class="md-num">${d.getDate()}</div>
+      ${shown.map(e=>`<div class="mevt ${CAT_META[e.cat].cls}">${CAT_META[e.cat].icon} ${escapeHtml(e.title)}</div>`).join("")}
+      ${extra>0 ? `<div class="md-more">+${extra} more</div>` : ""}
+    </div>`;
+  }
+  document.getElementById("monthGrid").innerHTML = html;
+}
 function renderCalendar(){
   renderCalLegend();
   if(calView==="schedule") renderScheduleView();
   if(calView==="daily") renderDailyView();
   if(calView==="weekly") renderWeeklyView();
+  if(calView==="monthly") renderMonthlyView();
 }
 document.querySelectorAll(".viewtabs button").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -613,6 +640,7 @@ document.querySelectorAll(".viewtabs button").forEach(btn=>{
     document.getElementById("calSchedule").style.display = calView==="schedule" ? "" : "none";
     document.getElementById("calDaily").style.display = calView==="daily" ? "" : "none";
     document.getElementById("calWeekly").style.display = calView==="weekly" ? "" : "none";
+    document.getElementById("calMonthly").style.display = calView==="monthly" ? "" : "none";
     renderCalendar();
   });
 });
@@ -620,6 +648,8 @@ document.getElementById("dayPrev").addEventListener("click", ()=>{ calDayCursor 
 document.getElementById("dayNext").addEventListener("click", ()=>{ calDayCursor = new Date(+calDayCursor+86400000); renderDailyView(); });
 document.getElementById("weekPrev").addEventListener("click", ()=>{ calWeekCursor = new Date(+calWeekCursor-7*86400000); renderWeeklyView(); });
 document.getElementById("weekNext").addEventListener("click", ()=>{ calWeekCursor = new Date(+calWeekCursor+7*86400000); renderWeeklyView(); });
+document.getElementById("monthPrev").addEventListener("click", ()=>{ calMonthCursor = new Date(calMonthCursor.getFullYear(), calMonthCursor.getMonth()-1, 1); renderMonthlyView(); });
+document.getElementById("monthNext").addEventListener("click", ()=>{ calMonthCursor = new Date(calMonthCursor.getFullYear(), calMonthCursor.getMonth()+1, 1); renderMonthlyView(); });
 document.getElementById("calRefresh").addEventListener("click", ()=>{ loadCalendar().then(renderCalendar); toast("Refreshing calendar…"); });
 
 /* --------------------------------------------------------- 6. WEATHER --- */
@@ -799,10 +829,13 @@ document.getElementById("tickerRetry").addEventListener("click", renderTicker);
 
 /* ------------------------------------------------------------ 8. HOME --- */
 let homeStoreFilter = "all";
-function checklistRow(item, showDelete){
+let homeDayCursor = (()=>{ const d = new Date(); d.setHours(0,0,0,0); return d; })();
+function checklistRow(item, showDelete, showStore){
+  const store = showStore && item.tag==="grocery" ? STORE_META[item.store||"wegmans"] : null;
   return `<div class="list-item ${item.done?'done':''}" data-id="${item.id}">
     <div class="check ${item.done?'on':''}">✓</div>
     <div class="list-text">${escapeHtml(item.text)}</div>
+    ${store ? `<div class="list-tag">${store.icon} ${escapeHtml(store.label)}</div>` : ''}
     ${showDelete ? '<button class="del">✕</button>' : ''}
   </div>`;
 }
@@ -828,7 +861,7 @@ function renderHomeDayGrid(){
   const today = new Date(); today.setHours(0,0,0,0);
   let html = "";
   for(let i=0;i<6;i++){
-    const d = new Date(+today + i*86400000);
+    const d = new Date(+homeDayCursor + i*86400000);
     const dayEvts = calEvents.filter(e=>sameDay(e.occStart,d)).slice(0,4);
     html += `<div class="day-card ${sameDay(d,today)?'today':''}">
       <div class="dc-head">
@@ -844,6 +877,17 @@ function renderHomeDayGrid(){
   }
   host.innerHTML = html;
 }
+document.getElementById("homeWeekNext").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  homeDayCursor = new Date(+homeDayCursor + 7*86400000);
+  renderHomeDayGrid();
+});
+document.getElementById("homeWeekToday").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  const d = new Date(); d.setHours(0,0,0,0);
+  homeDayCursor = d;
+  renderHomeDayGrid();
+});
 function renderHomeChores(){
   const host = document.getElementById("homeChores");
   const items = itemsStore.list.filter(i=>i.tag==="todo" && !i.done).slice(0,8);
@@ -855,7 +899,7 @@ function renderHomeGrocery(){
   let items = itemsStore.list.filter(i=>i.tag==="grocery" && !i.done);
   if(homeStoreFilter !== "all") items = items.filter(i=>(i.store||"wegmans")===homeStoreFilter);
   items = items.slice(0,8);
-  host.innerHTML = items.length ? items.map(i=>checklistRow(i,false)).join("") : `<div class="empty">Nothing on the list 🎉</div>`;
+  host.innerHTML = items.length ? items.map(i=>checklistRow(i,false,true)).join("") : `<div class="empty">Nothing on the list 🎉</div>`;
   wireCheckboxes(host);
 }
 document.getElementById("homeStoreSelect").addEventListener("click", (e)=>e.stopPropagation());
