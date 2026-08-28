@@ -401,6 +401,15 @@ const CAT_META = {
   other:   {label:"Other",       icon:"•",  cls:"cat-other"}
 };
 
+/* ------------------------------------------------------- grocery stores */
+const STORE_META = {
+  indian:  {label:"Indian",        icon:"🌶️"},
+  wegmans: {label:"Wegmans",       icon:"🥬"},
+  tj:      {label:"Trader Joe's",  icon:"🌴"},
+  costco:  {label:"Costco",        icon:"📦"}
+};
+const STORE_ORDER = ["indian","wegmans","tj","costco"];
+
 async function fetchICS(){
   let url = CFG.icsUrl.trim();
   if(!url) return null;
@@ -661,12 +670,19 @@ function renderHourlyGraph(hours){
     <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
   </svg>`;
 }
+function renderTopWxChip(cur){
+  const chip = document.getElementById("topWxChip");
+  if(!chip) return;
+  if(!cur){ chip.innerHTML = ""; return; }
+  chip.innerHTML = `<span class="ic">${wmoIcon(cur.weather_code)}</span>${Math.round(cur.temperature_2m)}°<span class="rh">💧${cur.relative_humidity_2m}%</span>`;
+}
 async function renderWeather(){
   document.getElementById("wxLocLabel").textContent = "Weather" + (CFG.weather.label ? " · " + CFG.weather.label : "");
   if(CFG.weather.lat == null){
     document.getElementById("wxNow").innerHTML = `<div class="empty">Set your location in Settings to see weather.</div>`;
     document.getElementById("wxHourly").innerHTML = "";
     document.getElementById("wxDays").innerHTML = "";
+    renderTopWxChip(null);
     return;
   }
   let data = wxCache;
@@ -679,6 +695,7 @@ async function renderWeather(){
   }
   if(!data) return;
   const cur = data.current;
+  renderTopWxChip(cur);
   document.getElementById("wxNow").innerHTML = `
     <div class="wx-icon">${wmoIcon(cur.weather_code)}</div>
     <div>
@@ -754,23 +771,76 @@ async function renderTicker(){
 document.getElementById("tickerRetry").addEventListener("click", renderTicker);
 
 /* ------------------------------------------------------------ 8. HOME --- */
-function renderHome(){
-  const now = new Date();
-  const upcoming = calEvents.filter(e=>e.occEnd > now).slice(0,6);
-  const agendaHost = document.getElementById("homeAgenda");
-  agendaHost.innerHTML = upcoming.length ? upcoming.map(evtHtml).join("") : `<div class="empty">No upcoming events.</div>`;
-
-  const items = itemsStore.list.filter(i=>!i.done).slice(0,10);
-  const listHost = document.getElementById("homeList");
-  listHost.innerHTML = items.length ? items.map(itemHtml).join("") : `<div class="empty">Nothing on the list 🎉</div>`;
-  wireCheckboxes(listHost);
-}
-function itemHtml(item){
+let homeStoreFilter = "all";
+function checklistRow(item, showDelete){
   return `<div class="list-item ${item.done?'done':''}" data-id="${item.id}">
     <div class="check ${item.done?'on':''}">✓</div>
     <div class="list-text">${escapeHtml(item.text)}</div>
-    <span class="list-tag">${item.tag==='grocery'?'🛒':'☑️'}</span>
+    ${showDelete ? '<button class="del">✕</button>' : ''}
   </div>`;
+}
+function catCounts(days){
+  const now = new Date();
+  const end = new Date(+now + days*86400000);
+  const counts = {travel:0, photo:0, doctor:0, friends:0};
+  calEvents.forEach(e=>{
+    if(e.occStart >= now && e.occStart <= end && Object.prototype.hasOwnProperty.call(counts, e.cat)) counts[e.cat]++;
+  });
+  return counts;
+}
+function renderHomeCatPills(){
+  const host = document.getElementById("homeCatPills");
+  const counts = catCounts(14);
+  host.innerHTML = Object.entries(counts).map(([k,n])=>{
+    const m = CAT_META[k];
+    return `<span class="cat-pill ${m.cls}">${m.icon} ${m.label}<span class="n">${n}</span></span>`;
+  }).join("");
+}
+function renderHomeDayGrid(){
+  const host = document.getElementById("homeDayGrid");
+  const today = new Date(); today.setHours(0,0,0,0);
+  let html = "";
+  for(let i=0;i<6;i++){
+    const d = new Date(+today + i*86400000);
+    const dayEvts = calEvents.filter(e=>sameDay(e.occStart,d)).slice(0,4);
+    html += `<div class="day-card ${sameDay(d,today)?'today':''}">
+      <div class="dc-head">
+        <span><span class="dow">${d.toLocaleDateString([],{weekday:'short'})}</span> <span class="dnum">${d.getDate()}</span></span>
+        <span class="dc-count">${dayEvts.length ? dayEvts.length+" evt"+(dayEvts.length===1?"":"s") : ""}</span>
+      </div>
+      ${dayEvts.length ? dayEvts.map(e=>`
+        <div class="day-evt ${CAT_META[e.cat].cls}">
+          <div class="de-title">${CAT_META[e.cat].icon} ${escapeHtml(e.title)}</div>
+          <div class="de-time">${fmtTime(e.occStart, e.allDay)}</div>
+        </div>`).join("") : `<div class="dc-empty">Nothing scheduled</div>`}
+    </div>`;
+  }
+  host.innerHTML = html;
+}
+function renderHomeChores(){
+  const host = document.getElementById("homeChores");
+  const items = itemsStore.list.filter(i=>i.tag==="todo" && !i.done).slice(0,8);
+  host.innerHTML = items.length ? items.map(i=>checklistRow(i,false)).join("") : `<div class="empty">Nothing on the list 🎉</div>`;
+  wireCheckboxes(host);
+}
+function renderHomeGrocery(){
+  const host = document.getElementById("homeGrocery");
+  let items = itemsStore.list.filter(i=>i.tag==="grocery" && !i.done);
+  if(homeStoreFilter !== "all") items = items.filter(i=>(i.store||"wegmans")===homeStoreFilter);
+  items = items.slice(0,8);
+  host.innerHTML = items.length ? items.map(i=>checklistRow(i,false)).join("") : `<div class="empty">Nothing on the list 🎉</div>`;
+  wireCheckboxes(host);
+}
+document.getElementById("homeStoreSelect").addEventListener("click", (e)=>e.stopPropagation());
+document.getElementById("homeStoreSelect").addEventListener("change", (e)=>{
+  homeStoreFilter = e.target.value;
+  renderHomeGrocery();
+});
+function renderHome(){
+  renderHomeCatPills();
+  renderHomeDayGrid();
+  renderHomeChores();
+  renderHomeGrocery();
 }
 function wireCheckboxes(root){
   root.querySelectorAll(".check").forEach(c=>{
@@ -785,7 +855,7 @@ function wireCheckboxes(root){
 }
 
 /* ------------------------------------------------------------ LIST ----- */
-let listFilter = "all";
+let listFilter = "todo";
 document.querySelectorAll(".segbtn [data-list]").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     document.querySelectorAll(".segbtn [data-list]").forEach(b=>b.classList.remove("active"));
@@ -794,32 +864,73 @@ document.querySelectorAll(".segbtn [data-list]").forEach(btn=>{
     renderList();
   });
 });
-function renderList(){
-  const host = document.getElementById("listBody");
-  let items = itemsStore.list;
-  if(listFilter !== "all") items = items.filter(i=>i.tag===listFilter);
-  items = [...items].sort((a,b)=>(a.done?1:0)-(b.done?1:0));
-  host.innerHTML = items.length ? items.map(i=>`
-    <div class="list-item ${i.done?'done':''}" data-id="${i.id}">
-      <div class="check ${i.done?'on':''}">✓</div>
-      <div class="list-text">${escapeHtml(i.text)}</div>
-      <span class="list-tag">${i.tag==='grocery'?'🛒 grocery':'☑️ to-do'}</span>
-      <button class="del">✕</button>
-    </div>`).join("") : `<div class="empty">Nothing here yet — add something above.</div>`;
-  wireCheckboxes(host);
-  host.querySelectorAll(".del").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.closest(".list-item").dataset.id;
-      itemsStore.remove(id);
+function buildGroceryColumnsShell(){
+  const host = document.getElementById("groceryCols");
+  host.innerHTML = STORE_ORDER.map(s=>{
+    const m = STORE_META[s];
+    return `<div class="gcol" data-store="${s}">
+      <div class="gcol-head">${m.icon} ${m.label}</div>
+      <div class="gcol-add">
+        <input type="text" placeholder="Add…" data-store-input="${s}" autocomplete="off">
+        <button data-store-add="${s}">+</button>
+      </div>
+      <div class="gcol-list" data-store-list="${s}"></div>
+    </div>`;
+  }).join("");
+  host.querySelectorAll("[data-store-add]").forEach(btn=>{
+    const s = btn.dataset.storeAdd;
+    const input = host.querySelector(`[data-store-input="${s}"]`);
+    const add = ()=>{
+      const text = input.value.trim();
+      if(!text) return;
+      itemsStore.add({text, tag:"grocery", store:s, done:false});
+      input.value = "";
+      input.focus();
+    };
+    btn.addEventListener("click", add);
+    input.addEventListener("keydown", e=>{ if(e.key==="Enter") add(); });
+  });
+}
+function renderGroceryColumns(){
+  STORE_ORDER.forEach(s=>{
+    const host = document.querySelector(`[data-store-list="${s}"]`);
+    if(!host) return;
+    let items = itemsStore.list.filter(i=>i.tag==="grocery" && (i.store||"wegmans")===s);
+    items = [...items].sort((a,b)=>(a.done?1:0)-(b.done?1:0));
+    host.innerHTML = items.length ? items.map(i=>checklistRow(i,true)).join("") : `<div class="empty" style="padding:12px 4px;">Nothing yet.</div>`;
+    wireCheckboxes(host);
+    host.querySelectorAll(".del").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        itemsStore.remove(btn.closest(".list-item").dataset.id);
+      });
     });
   });
+}
+function renderList(){
+  const isChores = listFilter === "todo";
+  document.getElementById("addbarWrap").style.display = isChores ? "" : "none";
+  document.getElementById("listBody").style.display = isChores ? "" : "none";
+  document.getElementById("groceryCols").style.display = isChores ? "none" : "";
+  if(isChores){
+    const host = document.getElementById("listBody");
+    let items = itemsStore.list.filter(i=>i.tag==="todo");
+    items = [...items].sort((a,b)=>(a.done?1:0)-(b.done?1:0));
+    host.innerHTML = items.length ? items.map(i=>checklistRow(i,true)).join("") : `<div class="empty">Nothing here yet — add something above.</div>`;
+    wireCheckboxes(host);
+    host.querySelectorAll(".del").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        itemsStore.remove(btn.closest(".list-item").dataset.id);
+      });
+    });
+  } else {
+    renderGroceryColumns();
+  }
 }
 function addListItem(){
   const input = document.getElementById("listInput");
   const text = input.value.trim();
   if(!text) return;
-  const tag = document.getElementById("listInputTag").value;
-  itemsStore.add({text, tag, done:false});
+  itemsStore.add({text, tag:"todo", done:false});
   input.value = "";
   input.focus();
 }
@@ -986,11 +1097,12 @@ function boot(){
   applyNightDim();
   renderNavVisibility();
   renderRotDots();
+  buildGroceryColumnsShell();
   initFirebase();
   loadCalendar().then(()=>{ renderCalendar(); renderHome(); });
   renderWeather();
   setInterval(()=>loadCalendar().then(()=>{ if(currentScreen==="calendar") renderCalendar(); renderHome(); }), 15*60*1000);
-  setInterval(()=>{ if(currentScreen==="weather") renderWeather(); }, 30*60*1000);
+  setInterval(renderWeather, 30*60*1000);
   setInterval(renderNavVisibility, 5*60*1000);
   startRotation();
   goto("home");

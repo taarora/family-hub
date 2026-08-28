@@ -186,6 +186,64 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .list-tag{font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; color:var(--dim); border:1px solid var(--line);}
 .empty{color:var(--faint); font-size:14px; padding:20px 6px; text-align:center;}
 
+/* ----------------------------------------------------- HOME · calendar -- */
+.cat-pillrow{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;}
+.cat-pill{
+  display:inline-flex; align-items:center; gap:5px; padding:5px 10px 5px 9px; border-radius:999px;
+  font-size:11.5px; font-weight:800; color:#fff; letter-spacing:.01em;
+}
+.cat-pill .n{font-weight:900; background:rgba(255,255,255,.28); border-radius:999px; padding:0 6px; margin-left:1px;}
+.cat-pill.cat-travel{background:var(--cat-travel);}
+.cat-pill.cat-photo{background:var(--cat-photo);}
+.cat-pill.cat-doctor{background:var(--cat-doctor);}
+.cat-pill.cat-friends{background:var(--cat-friends); color:#241900;}
+.cat-pill.cat-friends .n{background:rgba(0,0,0,.14);}
+
+.home-daygrid{display:grid; grid-template-columns:repeat(2,1fr); gap:8px;}
+.day-card{
+  background:var(--panel2); border:1px solid var(--line); border-radius:var(--radius-sm);
+  padding:9px 9px 10px; min-height:0;
+}
+.day-card.today{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
+.day-card .dc-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:6px;}
+.day-card .dc-head .dow{font-size:10.5px; font-weight:800; color:var(--faint); text-transform:uppercase; letter-spacing:.04em;}
+.day-card .dc-head .dnum{font-size:15px; font-weight:800; margin-left:4px;}
+.day-card .dc-count{font-size:10.5px; color:var(--faint); font-weight:700;}
+.day-card .dc-empty{font-size:11.5px; color:var(--faint); padding:2px 0 4px;}
+.day-evt{border-radius:9px; padding:6px 8px; margin-bottom:5px; font-weight:700; box-shadow:0 2px 6px rgba(0,0,0,.14);}
+.day-evt:last-child{margin-bottom:0;}
+.day-evt .de-title{display:flex; align-items:center; gap:4px; font-size:12px; line-height:1.25;}
+.day-evt .de-time{font-size:10px; font-weight:700; opacity:.85; margin-top:2px;}
+.day-evt.cat-travel{background:var(--cat-travel); color:#fff;}
+.day-evt.cat-photo{background:var(--cat-photo); color:#fff;}
+.day-evt.cat-doctor{background:var(--cat-doctor); color:#fff;}
+.day-evt.cat-friends{background:var(--cat-friends); color:#241900;}
+.day-evt.cat-other{background:var(--cat-other); color:#fff;}
+
+/* --------------------------------------------------------- topbar wx --- */
+.wx-chip{display:flex; align-items:center; gap:5px; font-size:13px; font-weight:700; color:var(--dim); white-space:nowrap;}
+.wx-chip .ic{font-size:17px;}
+.wx-chip .rh{color:var(--faint); font-weight:600; font-size:11px;}
+.wx-chip:empty{display:none;}
+
+/* ----------------------------------------------------- store selector -- */
+.store-select{
+  border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--tx);
+  font-weight:700; font-size:12px; padding:5px 8px; max-width:150px;
+}
+
+/* ------------------------------------------------------- grocery cols -- */
+.grocery-cols{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px;}
+@media (max-width:900px){ .grocery-cols{grid-template-columns:repeat(2,minmax(0,1fr));} }
+@media (max-width:520px){ .grocery-cols{grid-template-columns:minmax(0,1fr);} }
+.gcol{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; box-shadow:var(--shadow); min-width:0;}
+.gcol-head{font-weight:800; font-size:14.5px; margin-bottom:10px;}
+.gcol-add{display:flex; gap:6px; margin-bottom:10px;}
+.gcol-add input{flex:1; min-width:0; min-height:40px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--tx); padding:0 10px; font-size:14px;}
+.gcol-add button{min-height:40px; width:40px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--tx); font-weight:800; font-size:17px; cursor:pointer;}
+.gcol-list .list-item{padding:7px 2px;}
+.gcol-list .list-item .del{width:30px; height:30px; font-size:14px;}
+
 /* ---------------------------------------------------------- CALENDAR --- */
 .viewtabs{display:flex; gap:8px; margin-bottom:14px;}
 .viewtabs button{flex:1;}
@@ -240,6 +298,8 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .addbar input{flex:1; min-height:var(--touch); border-radius:14px; border:1px solid var(--line); background:var(--panel2); color:var(--tx); padding:0 14px; font-size:16px;}
 .segbtn{display:flex; gap:6px; background:var(--bg2); padding:4px; border-radius:14px; border:1px solid var(--line);}
 .segbtn button{flex:1; padding:8px; border-radius:10px; border:0; background:transparent; color:var(--dim); font-weight:800; font-size:13px;}
+#screen-list .segbtn{display:inline-flex;}
+#screen-list .segbtn button{flex:0 0 auto; padding:9px 26px;}
 .segbtn button.active{background:var(--panel); color:var(--tx); box-shadow:var(--shadow);}
 .swipehint{font-size:12px; color:var(--faint); margin:2px 0 10px;}
 .list-item .del{width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--bad); font-size:16px; flex-shrink:0;}
@@ -313,6 +373,7 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
   <header id="topbar">
     <div class="brand"><span class="dot"></span>Family Hub</div>
     <div id="dateLine"></div>
+    <div class="wx-chip" id="topWxChip"></div>
     <div class="topspacer"></div>
     <div id="rotDots"></div>
     <button class="iconbtn" id="btnRotate" title="Pause/resume rotation">⏵</button>
@@ -338,19 +399,35 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
         <div class="home-col">
           <div class="home-panel">
             <div class="hp-head" data-goto="calendar">
-              <h3>📅 Today &amp; Upcoming</h3>
+              <h3>📅 This Week</h3>
               <span class="chev">›</span>
             </div>
-            <div class="hp-body" id="homeAgenda"></div>
+            <div class="cat-pillrow" id="homeCatPills"></div>
+            <div class="hp-body">
+              <div class="home-daygrid" id="homeDayGrid"></div>
+            </div>
           </div>
         </div>
         <div class="home-col">
           <div class="home-panel">
             <div class="hp-head" data-goto="list">
-              <h3>✅ Groceries &amp; To-Do</h3>
+              <h3>✅ Chores</h3>
               <span class="chev">›</span>
             </div>
-            <div class="hp-body" id="homeList"></div>
+            <div class="hp-body" id="homeChores"></div>
+          </div>
+          <div class="home-panel">
+            <div class="hp-head">
+              <h3>🛒 Grocery List</h3>
+              <select class="store-select" id="homeStoreSelect">
+                <option value="all">All Stores</option>
+                <option value="indian">🌶️ Indian</option>
+                <option value="wegmans">🥬 Wegmans</option>
+                <option value="tj">🌴 Trader Joe's</option>
+                <option value="costco">📦 Costco</option>
+              </select>
+            </div>
+            <div class="hp-body" id="homeGrocery"></div>
           </div>
         </div>
       </div>
@@ -410,19 +487,15 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
     <!-- ============================================================ LIST -->
     <section class="screen" id="screen-list">
       <div class="segbtn" style="margin-bottom:12px;">
-        <button class="active" data-list="all">All</button>
-        <button data-list="grocery">Groceries</button>
-        <button data-list="todo">To-Do</button>
+        <button class="active" data-list="todo">✅ Chores</button>
+        <button data-list="grocery">🛒 Grocery</button>
       </div>
-      <div class="addbar">
-        <input id="listInput" type="text" placeholder="Add an item…" autocomplete="off">
-        <select id="listInputTag" style="min-width:104px; border-radius:14px; border:1px solid var(--line); background:var(--panel2); color:var(--tx); font-weight:700;">
-          <option value="grocery">🛒 Grocery</option>
-          <option value="todo">☑️ To-Do</option>
-        </select>
+      <div class="addbar" id="addbarWrap">
+        <input id="listInput" type="text" placeholder="Add a chore…" autocomplete="off">
         <button class="btn primary" id="listAdd">Add</button>
       </div>
       <div class="card" id="listBody"></div>
+      <div class="grocery-cols" id="groceryCols" style="display:none;"></div>
     </section>
 
     <!-- ========================================================= RECIPES -->
