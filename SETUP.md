@@ -1,8 +1,18 @@
 # Family Hub — setup
 
-The app itself is done and works right away in "solo" mode (each device has its own local groceries/to-do list, no calendar, no weather, no ticker wall). The steps below turn on the connected features. None of them require touching code — everything is a link, a paste, or a checkbox in the app's own Settings screen.
+The app itself is done and works right away in "solo" mode (each device has its own local chores list and store-sorted grocery list, no calendar, no weather, no ticker wall). The steps below turn on the connected features. None of them require touching code — everything is a link, a paste, or a checkbox in the app's own Settings screen.
 
 Do these roughly in order. Budget about 20–30 minutes total, most of it Firebase.
+
+**Lost your settings?** (e.g. deleted the app to troubleshoot) — see `SETTINGS-CHEATSHEET.md` in this same folder before redoing all of this. It's not on GitHub on purpose (some of those values are effectively "anyone with this link can see your family's calendar/list data," so it stays local-only) — it lives only in this folder on your Mac. Back it up somewhere of your own (Notes, a password manager) so a lost laptop doesn't mean redoing Firebase too.
+
+---
+
+## 0. Quick tour
+
+- **Home** — left: "This Week" with colored count-pills per calendar category (Travel/Photography/Doctor/Friends) and a 6-day card grid of what's coming up. Right: **Chores** (your combined to-do list, tap to check off) and **Grocery List** (pick a store from the dropdown, or "All Stores").
+- **Lists screen** — two tabs: **Chores** (flat checklist, add at the top) and **Grocery** (four columns — Indian, Wegmans, Trader Joe's, Costco — each with its own add box, so items file straight into the right store).
+- Everything else (Calendar, Weather, Markets, Recipes, Settings) is as described below.
 
 ---
 

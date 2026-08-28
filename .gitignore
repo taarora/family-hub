@@ -1,1 +1,8 @@
 .DS_Store
+
+# Personal config values — never publish these to the public repo
+SETTINGS-CHEATSHEET.md
+
+# Python cache from public_client.py testing
+__pycache__/
+*.pyc
