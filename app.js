@@ -21,7 +21,7 @@
 const DEFAULTS = {
   theme: "dark",                 // light | dark | auto
   night: { enabled:false, start:"21:00", end:"07:00" },
-  rotate: { enabled:false, interval:30, screens:["home","calendar","weather","ticker","list"] },
+  rotate: { enabled:false, interval:30, screens:["home2","calendar","weather","ticker","list"] },
   hideWeekendTicker: true,
   icsUrl: "",
   rtdbUrl: "",
@@ -103,9 +103,9 @@ document.getElementById("dimOverlay").addEventListener("click", (e)=>{
 });
 
 /* -------------------------------------------------- 3. NAV + ROTATION ---- */
-const ALL_SCREENS = ["home","home2","calendar","weather","ticker","list","recipes","settings"];
-const ROTATABLE = ["home","home2","calendar","weather","ticker","list","recipes"];
-let currentScreen = "home";
+const ALL_SCREENS = ["home2","calendar","weather","ticker","list","recipes","settings"];
+const ROTATABLE = ["home2","calendar","weather","ticker","list","recipes"];
+let currentScreen = "home2";
 let rotTimer = null, idleResumeTimer = null, rotPaused = false;
 
 function isWeekend(){ const d = new Date().getDay(); return d===0 || d===6; }
@@ -123,7 +123,6 @@ function goto(screen){
   if(screen === "ticker"){ renderTicker(); renderMarketsWatchlist(); }
   if(screen === "list") renderList();
   if(screen === "recipes") renderRecipes();
-  if(screen === "home") renderHome();
   if(screen === "home2") renderHome2();
 }
 
@@ -132,7 +131,7 @@ function renderNavVisibility(){
   document.querySelectorAll(".navbtn").forEach(b=>{
     b.hidden = !vis.includes(b.dataset.screen);
   });
-  if(!vis.includes(currentScreen)) goto("home");
+  if(!vis.includes(currentScreen)) goto("home2");
 }
 
 function rotationList(){
@@ -331,7 +330,7 @@ function initFirebase(){
     watchlistStore.subscribe(renderAllWatchlistViews);
   }
 }
-function renderAllListViews(){ renderList(); renderHome(); if(currentScreen==="home2") renderHome2(); }
+function renderAllListViews(){ renderList(); if(currentScreen==="home2") renderHome2(); }
 function renderAllWatchlistViews(){ renderMarketsWatchlist(); if(currentScreen==="home2") renderH2Watchlist(); }
 
 /* ------------------------------------------------------- 5. CALENDAR ---- */
@@ -1093,9 +1092,7 @@ document.getElementById("watchlistInput").addEventListener("keydown", (e)=>{
 });
 
 /* ------------------------------------------------------------ 8. HOME --- */
-let homeStoreFilter = "all";
-let homeDayCursor = (()=>{ const d = new Date(); d.setHours(0,0,0,0); return d; })();
-// Chores split into two buckets for the Home 2 layout ("Appts scheduling" vs
+// Chores split into two buckets for the Home layout ("Appts scheduling" vs
 // "Household") — a chore with no category yet (everything added before this
 // existed) is treated as household, so nothing already on the list vanishes
 // from either view.
@@ -1158,80 +1155,6 @@ function wireItemEdit(host){
     });
   });
 }
-function catCounts(days){
-  const now = new Date();
-  const end = new Date(+now + days*86400000);
-  const counts = {travel:0, photo:0, doctor:0, friends:0};
-  calEvents.forEach(e=>{
-    if(e.occStart >= now && e.occStart <= end && Object.prototype.hasOwnProperty.call(counts, e.cat)) counts[e.cat]++;
-  });
-  return counts;
-}
-function renderHomeCatPills(){
-  const host = document.getElementById("homeCatPills");
-  const counts = catCounts(14);
-  host.innerHTML = Object.entries(counts).map(([k,n])=>{
-    const m = CAT_META[k];
-    return `<span class="cat-pill ${m.cls}">${m.icon} ${m.label}<span class="n">${n}</span></span>`;
-  }).join("");
-}
-function renderHomeDayGrid(){
-  const host = document.getElementById("homeDayGrid");
-  const today = new Date(); today.setHours(0,0,0,0);
-  let html = "";
-  for(let i=0;i<6;i++){
-    const d = new Date(+homeDayCursor + i*86400000);
-    const dayEvts = calEvents.filter(e=>sameDay(e.occStart,d)).slice(0,4);
-    html += `<div class="day-card ${sameDay(d,today)?'today':''}">
-      <div class="dc-head">
-        <span><span class="dow">${d.toLocaleDateString([],{weekday:'short'})}</span> <span class="dnum">${d.getDate()}</span></span>
-        <span class="dc-count">${dayEvts.length ? dayEvts.length+" evt"+(dayEvts.length===1?"":"s") : ""}</span>
-      </div>
-      ${dayEvts.length ? dayEvts.map(e=>`
-        <div class="day-evt ${CAT_META[e.cat].cls}">
-          <div class="de-title">${CAT_META[e.cat].icon} ${escapeHtml(e.title)}</div>
-          <div class="de-time">${fmtTime(e.occStart, e.allDay)}</div>
-        </div>`).join("") : `<div class="dc-empty">Nothing scheduled</div>`}
-    </div>`;
-  }
-  host.innerHTML = html;
-}
-document.getElementById("homeWeekNext").addEventListener("click", (e)=>{
-  e.stopPropagation();
-  homeDayCursor = new Date(+homeDayCursor + 7*86400000);
-  renderHomeDayGrid();
-});
-document.getElementById("homeWeekToday").addEventListener("click", (e)=>{
-  e.stopPropagation();
-  const d = new Date(); d.setHours(0,0,0,0);
-  homeDayCursor = d;
-  renderHomeDayGrid();
-});
-function renderHomeChores(){
-  const host = document.getElementById("homeChores");
-  const items = itemsStore.list.filter(i=>i.tag==="todo" && !i.done).slice(0,8);
-  host.innerHTML = items.length ? items.map(i=>checklistRow(i,false)).join("") : `<div class="empty">Nothing on the list 🎉</div>`;
-  wireCheckboxes(host);
-}
-function renderHomeGrocery(){
-  const host = document.getElementById("homeGrocery");
-  let items = itemsStore.list.filter(i=>i.tag==="grocery" && !i.done);
-  if(homeStoreFilter !== "all") items = items.filter(i=>(i.store||"wegmans")===homeStoreFilter);
-  items = items.slice(0,8);
-  host.innerHTML = items.length ? items.map(i=>checklistRow(i,false,true)).join("") : `<div class="empty">Nothing on the list 🎉</div>`;
-  wireCheckboxes(host);
-}
-document.getElementById("homeStoreSelect").addEventListener("click", (e)=>e.stopPropagation());
-document.getElementById("homeStoreSelect").addEventListener("change", (e)=>{
-  homeStoreFilter = e.target.value;
-  renderHomeGrocery();
-});
-function renderHome(){
-  renderHomeCatPills();
-  renderHomeDayGrid();
-  renderHomeChores();
-  renderHomeGrocery();
-}
 function wireCheckboxes(root){
   root.querySelectorAll(".check").forEach(c=>{
     c.addEventListener("click", (e)=>{
@@ -1244,16 +1167,13 @@ function wireCheckboxes(root){
   });
 }
 
-/* --------------------------------------------------------- 8b. HOME 2 --- */
-// A second, from-scratch layout for the same data — a colored-header card
-// grid modelled on a fridge-tablet reference the user liked, built to sit
-// side by side with the original Home tab so the two can be compared before
-// deciding whether to keep, replace, or drop either one. Deliberately reuses
-// every existing data source and render helper it can (itemsStore, calEvents,
-// wxCache, watchlistStore, the trading-embed pattern) rather than building a
-// parallel data path — this is a new *view*, not new state, except for its
-// own month/week cursors so paging one Home tab never silently pages the
-// other out from under the person comparing them.
+/* --------------------------------------------------------- 8b. HOME UI --- */
+// The Home layout — a colored-header card grid modelled on a fridge-tablet
+// reference the user liked. This replaced an earlier, simpler Home tab
+// (removed 2026-08-29). Deliberately reuses every existing data source and
+// render helper it can (itemsStore, calEvents, wxCache, watchlistStore, the
+// trading-embed pattern) rather than building a parallel data path — this is
+// a *view*, not new state, except for its own month/week cursors.
 let home2MonthCursor = new Date();
 let home2WeekCursor = new Date();
 const H2_MONTH_DOT_CAP = 4;
@@ -1306,10 +1226,9 @@ function renderH2Week(){
     if(!byDay.has(key)) byDay.set(key, []);
     byDay.get(key).push(e);
   });
-  // Solid colored `.day-evt` pills (same markup/classes as the original
-  // Home tab's day-card grid), not the subtler dot+text-tint `evtHtml()`
-  // treatment the Calendar screen uses — the user specifically liked
-  // Home's punchier coloring here and asked for it on Home 2 too.
+  // Solid colored `.day-evt` pills, not the subtler dot+text-tint
+  // `evtHtml()` treatment the Calendar screen uses — the user specifically
+  // asked for this punchier coloring on the Home week view.
   let html = "";
   for(const [key, evts] of byDay){
     const d = new Date(key);
@@ -1557,7 +1476,7 @@ function loadSettingsUI(){
   document.getElementById("rotateInterval").value = CFG.rotate.interval;
   document.getElementById("swWeekendHide").classList.toggle("on", CFG.hideWeekendTicker);
   const rs = document.getElementById("rotateScreens");
-  rs.innerHTML = ROTATABLE.map(s => `<button class="chip-toggle ${CFG.rotate.screens.includes(s)?'on':''}" data-s="${s}">${s[0].toUpperCase()+s.slice(1)}</button>`).join("");
+  rs.innerHTML = ROTATABLE.map(s => `<button class="chip-toggle ${CFG.rotate.screens.includes(s)?'on':''}" data-s="${s}">${s==="home2"?"Home":s[0].toUpperCase()+s.slice(1)}</button>`).join("");
   rs.querySelectorAll("button").forEach(b=>{
     b.addEventListener("click", ()=>{
       const s = b.dataset.s;
@@ -1677,9 +1596,9 @@ function boot(){
   renderRotDots();
   buildGroceryColumnsShell();
   initFirebase();
-  loadCalendar().then(()=>{ renderCalendar(); renderHome(); renderHome2(); });
+  loadCalendar().then(()=>{ renderCalendar(); renderHome2(); });
   renderWeather().then(renderHome2);
-  setInterval(()=>loadCalendar().then(()=>{ if(currentScreen==="calendar") renderCalendar(); renderHome(); renderHome2(); }), 15*60*1000);
+  setInterval(()=>loadCalendar().then(()=>{ if(currentScreen==="calendar") renderCalendar(); renderHome2(); }), 15*60*1000);
   setInterval(()=>{ renderWeather().then(renderHome2); }, 30*60*1000);
   setInterval(renderNavVisibility, 5*60*1000);
   // Quotes move fast enough that the 30-min weather/calendar cadence above
@@ -1687,7 +1606,7 @@ function boot(){
   // screen.
   setInterval(()=>{ if(currentScreen==="home2") renderH2Watchlist(); }, 60*1000);
   startRotation();
-  goto("home");
+  goto("home2");
 
   if("serviceWorker" in navigator){
     navigator.serviceWorker.register("sw.js").catch(()=>{});

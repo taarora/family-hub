@@ -137,32 +137,6 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
   font-size:12px; font-weight:800; letter-spacing:.03em; border:1px solid var(--line); color:var(--dim);
 }
 
-/* -------------------------------------------------------------- HOME ---- */
-#screen-home .home-grid{
-  display:grid; grid-template-columns:1.15fr 1fr; gap:16px; height:calc(100% - 2px);
-}
-@media (max-width: 760px){ #screen-home .home-grid{ grid-template-columns:1fr; } }
-.home-col{display:flex; flex-direction:column; gap:12px; min-height:0;}
-.home-panel{
-  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
-  box-shadow:var(--shadow); padding:14px; display:flex; flex-direction:column; min-height:0; flex:1;
-}
-.home-panel .hp-head{display:flex; align-items:center; gap:8px; margin-bottom:8px; cursor:pointer;}
-.home-panel .hp-head h3{margin:0; font-size:17px; flex:1;}
-.home-panel .hp-head .chev{color:var(--faint); font-size:18px;}
-.home-panel .hp-body{overflow-y:auto; flex:1;}
-.hp-title-link{cursor:pointer;}
-.hp-today{
-  min-height:30px; padding:0 10px; border-radius:10px; border:1px solid var(--line);
-  background:var(--panel2); color:var(--faint); font-weight:800; font-size:11.5px; cursor:pointer; flex-shrink:0;
-}
-.hp-today:active{transform:scale(.96);}
-.chev-btn{
-  color:var(--faint); font-size:20px; background:none; border:none; cursor:pointer;
-  padding:2px 4px; flex-shrink:0; line-height:1;
-}
-.chev-btn:active{transform:scale(.9);}
-
 .agenda-item{
   display:flex; align-items:flex-start; gap:12px; padding:10px 6px; border-bottom:1px solid var(--line);
 }
@@ -197,30 +171,6 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 .list-tag{font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; color:var(--dim); border:1px solid var(--line); flex-shrink:0; white-space:nowrap;}
 .empty{color:var(--faint); font-size:14px; padding:20px 6px; text-align:center;}
 
-/* ----------------------------------------------------- HOME · calendar -- */
-.cat-pillrow{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;}
-.cat-pill{
-  display:inline-flex; align-items:center; gap:5px; padding:5px 10px 5px 9px; border-radius:999px;
-  font-size:11.5px; font-weight:800; color:#fff; letter-spacing:.01em;
-}
-.cat-pill .n{font-weight:900; background:rgba(255,255,255,.28); border-radius:999px; padding:0 6px; margin-left:1px;}
-.cat-pill.cat-travel{background:var(--cat-travel);}
-.cat-pill.cat-photo{background:var(--cat-photo);}
-.cat-pill.cat-doctor{background:var(--cat-doctor);}
-.cat-pill.cat-friends{background:var(--cat-friends); color:#241900;}
-.cat-pill.cat-friends .n{background:rgba(0,0,0,.14);}
-
-.home-daygrid{display:grid; grid-template-columns:repeat(2,1fr); gap:8px;}
-.day-card{
-  background:var(--panel2); border:1px solid var(--line); border-radius:var(--radius-sm);
-  padding:9px 9px 10px; min-height:0;
-}
-.day-card.today{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
-.day-card .dc-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:6px;}
-.day-card .dc-head .dow{font-size:10.5px; font-weight:800; color:var(--faint); text-transform:uppercase; letter-spacing:.04em;}
-.day-card .dc-head .dnum{font-size:15px; font-weight:800; margin-left:4px;}
-.day-card .dc-count{font-size:10.5px; color:var(--faint); font-weight:700;}
-.day-card .dc-empty{font-size:11.5px; color:var(--faint); padding:2px 0 4px;}
 .day-evt{border-radius:9px; padding:6px 8px; margin-bottom:5px; font-weight:700; box-shadow:0 2px 6px rgba(0,0,0,.14);}
 .day-evt:last-child{margin-bottom:0;}
 .day-evt .de-title{display:flex; align-items:center; gap:4px; font-size:12px; line-height:1.25;}
@@ -248,8 +198,7 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
   flex-wrap:nowrap;
 }
 /* Per-card accent colors — the reference image used one uniform blue banner
-   everywhere, which read as flat once it was actually on screen next to
-   the original Home tab's more varied palette. Each card gets its own hue
+   everywhere, which read as flat once it was actually on screen. Each card gets its own hue
    here purely for visual identity/wayfinding (glance down a column and
    tell cards apart at a distance) — this is NOT the same channel as the
    calendar category colors (cat-travel/cat-photo/etc: those encode
@@ -341,12 +290,6 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
 .wx-chip .rh{color:var(--faint); font-weight:600; font-size:11px;}
 .wx-chip:empty{display:none;}
 
-/* ----------------------------------------------------- store selector -- */
-.store-select{
-  border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--tx);
-  font-weight:700; font-size:12px; padding:5px 8px; max-width:150px;
-}
-
 /* ------------------------------------------------------- grocery cols -- */
 .grocery-cols{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px;}
 @media (max-width:900px){ .grocery-cols{grid-template-columns:repeat(2,minmax(0,1fr));} }
@@ -422,8 +365,8 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
 .wx-hour .t{font-weight:800; color:var(--tx); font-size:14px; margin-top:4px;}
 .wx-summary{color:var(--dim); font-size:14px; font-weight:600; padding:0 4px 12px; max-width:640px;}
 
-/* Home tab's compact weekly strip (Home 2's card reuses this too) — kept
-   separate from the 10-day list below, which is its own denser layout. */
+/* Home's compact weekly strip — kept separate from the 10-day list below,
+   which is its own denser layout. */
 .wx-day{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 6px; text-align:center;}
 .wx-day .d{font-size:12px; font-weight:800; color:var(--faint); text-transform:uppercase;}
 .wx-day .ic{font-size:26px; margin:6px 0;}
@@ -579,8 +522,7 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
   </header>
 
   <nav id="screenNav">
-    <button class="navbtn active" data-screen="home"><span class="ic">🏠</span>Home</button>
-    <button class="navbtn" data-screen="home2"><span class="ic">🧊</span>Home 2</button>
+    <button class="navbtn active" data-screen="home2"><span class="ic">🏠</span>Home</button>
     <button class="navbtn" data-screen="calendar"><span class="ic">📅</span>Calendar</button>
     <button class="navbtn" data-screen="weather"><span class="ic">⛅</span>Weather</button>
     <button class="navbtn" data-screen="ticker" id="navTicker"><span class="ic">📈</span>Markets</button>
@@ -592,52 +534,10 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
   <main id="screens">
 
     <!-- ============================================================ HOME -->
-    <section class="screen active" id="screen-home">
-      <div class="home-grid">
-        <div class="home-col">
-          <div class="home-panel">
-            <div class="hp-head" style="cursor:default;">
-              <h3 class="hp-title-link" data-goto="calendar">📅 This Week</h3>
-              <button class="hp-today" id="homeWeekToday">Today</button>
-              <button class="chev-btn" id="homeWeekNext" aria-label="Next week">›</button>
-            </div>
-            <div class="cat-pillrow" id="homeCatPills"></div>
-            <div class="hp-body">
-              <div class="home-daygrid" id="homeDayGrid"></div>
-            </div>
-          </div>
-        </div>
-        <div class="home-col">
-          <div class="home-panel">
-            <div class="hp-head" data-goto="list">
-              <h3>✅ Chores</h3>
-              <span class="chev">›</span>
-            </div>
-            <div class="hp-body" id="homeChores"></div>
-          </div>
-          <div class="home-panel">
-            <div class="hp-head">
-              <h3>🛒 Grocery List</h3>
-              <select class="store-select" id="homeStoreSelect">
-                <option value="all">All Stores</option>
-                <option value="indian">🌶️ Indian</option>
-                <option value="wegmans">🥬 Wegmans</option>
-                <option value="tj">🌴 Trader Joe's</option>
-                <option value="costco">📦 Costco</option>
-              </select>
-            </div>
-            <div class="hp-body" id="homeGrocery"></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ========================================================== HOME 2 -->
-    <!-- Prototype layout, side by side with the original Home tab for comparison —
-         see index.html/app.js "8b. HOME 2" for the reasoning. Every card here is
-         read-only + a checkbox; adding/editing still happens on the tab that owns
-         that data (Lists, Markets). -->
-    <section class="screen" id="screen-home2">
+    <!-- ============================================================ HOME -->
+    <!-- Every card here is read-only + a checkbox; adding/editing still
+         happens on the tab that owns that data (Lists, Markets). -->
+    <section class="screen active" id="screen-home2">
       <div class="h2-grid">
 
         <div class="h2-col">
@@ -690,7 +590,7 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
             <div class="h2-card-body h2-wx-body" id="h2WxDays"></div>
           </div>
           <div class="h2-card" style="flex:1;">
-            <div class="h2-card-head hc-appt"><span>🗓️ Chores — Appts</span></div>
+            <div class="h2-card-head hc-appt"><span>🗓️ Chores — Appointments</span></div>
             <div class="h2-card-body" id="h2c-appt"></div>
           </div>
           <div class="h2-card" style="flex:1;">
