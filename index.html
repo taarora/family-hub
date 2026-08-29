@@ -247,6 +247,26 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
   padding:9px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;
   flex-wrap:nowrap;
 }
+/* Per-card accent colors — the reference image used one uniform blue banner
+   everywhere, which read as flat once it was actually on screen next to
+   the original Home tab's more varied palette. Each card gets its own hue
+   here purely for visual identity/wayfinding (glance down a column and
+   tell cards apart at a distance) — this is NOT the same channel as the
+   calendar category colors (cat-travel/cat-photo/etc: those encode
+   meaning and must stay consistent everywhere they appear). Still kept to
+   the same blue/purple/orange/teal/slate family as the rest of the app —
+   no red, no green — so it stays unambiguous under deuteranopia even
+   though nothing here needs to be *distinguished* the way category colors
+   do. */
+.h2-card-head.hc-month{background:linear-gradient(135deg,#4f8cff,#2f5fce);}
+.h2-card-head.hc-week{background:linear-gradient(135deg,#7c6fea,#5747c9);}
+.h2-card-head.hc-wegmans{background:linear-gradient(135deg,#0ea5e9,#0876ab);}
+.h2-card-head.hc-indian{background:linear-gradient(135deg,#f97316,#c85a0a);}
+.h2-card-head.hc-costco{background:linear-gradient(135deg,#64748b,#445063);}
+.h2-card-head.hc-weather{background:linear-gradient(135deg,#06b6d4,#0891a3);}
+.h2-card-head.hc-appt{background:linear-gradient(135deg,#f5a524,#c97e0c);}
+.h2-card-head.hc-household{background:linear-gradient(135deg,#a855f7,#7d2fd1);}
+.h2-card-head.hc-watchlist{background:linear-gradient(135deg,#2563eb,#1a44ab);}
 .h2-card-head > span:first-child{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
 .h2-card-body{padding:10px 12px; flex:1; overflow-y:auto; min-height:60px;}
 .h2-nav{display:flex; align-items:center; gap:4px; font-weight:700; font-size:11.5px; color:rgba(255,255,255,.92);}
@@ -400,12 +420,67 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
 #wxHourly{display:flex; gap:2px; overflow-x:auto; padding:14px 4px; margin-bottom:8px;}
 .wx-hour{flex:0 0 64px; text-align:center; font-size:12px; color:var(--dim);}
 .wx-hour .t{font-weight:800; color:var(--tx); font-size:14px; margin-top:4px;}
-#wxDays{display:grid; grid-template-columns:repeat(5,1fr); gap:8px;}
+.wx-summary{color:var(--dim); font-size:14px; font-weight:600; padding:0 4px 12px; max-width:640px;}
+
+/* Home tab's compact weekly strip (Home 2's card reuses this too) — kept
+   separate from the 10-day list below, which is its own denser layout. */
 .wx-day{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 6px; text-align:center;}
 .wx-day .d{font-size:12px; font-weight:800; color:var(--faint); text-transform:uppercase;}
 .wx-day .ic{font-size:26px; margin:6px 0;}
 .wx-day .hl{font-size:13px; font-weight:700;}
 .wx-day .hl .lo{color:var(--faint); font-weight:600;}
+
+/* ------------------------------------------------- WEATHER — widgets --- */
+.wx-grid{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; margin-top:16px;}
+@media (max-width:900px){ .wx-grid{grid-template-columns:repeat(2, minmax(0,1fr));} }
+@media (max-width:600px){ .wx-grid{grid-template-columns:minmax(0,1fr);} }
+.wx-card-wide{grid-column:span 3;}
+@media (max-width:900px){ .wx-card-wide{grid-column:span 2;} }
+@media (max-width:600px){ .wx-card-wide{grid-column:span 1;} }
+.wx-card-title{
+  font-size:11.5px; font-weight:800; color:var(--faint); text-transform:uppercase; letter-spacing:.05em;
+  margin-bottom:10px; display:flex; align-items:center; gap:6px;
+}
+
+/* 10-day list — a shared hi/lo scale runs across every row (see
+   renderWx10Day) so the bars are comparable at a glance, same idea as
+   Apple Weather's list. */
+.wx10-row{display:flex; align-items:center; gap:8px; padding:7px 2px; border-top:1px solid var(--line); font-size:13px;}
+.wx10-row:first-child{border-top:none;}
+.wx10-day{width:58px; font-weight:800; flex-shrink:0;}
+.wx10-pop{width:38px; font-size:11px; color:var(--accent); font-weight:800; flex-shrink:0; text-align:center;}
+.wx10-ic{font-size:18px; width:26px; text-align:center; flex-shrink:0;}
+.wx10-lo{width:28px; text-align:right; color:var(--faint); font-weight:700; flex-shrink:0;}
+.wx10-bar-track{flex:1; height:5px; border-radius:3px; background:var(--line2); position:relative; margin:0 6px; min-width:40px;}
+.wx10-bar-fill{position:absolute; top:0; bottom:0; border-radius:3px; background:linear-gradient(90deg,var(--accent),var(--accent2));}
+.wx10-hi{width:32px; font-weight:800; flex-shrink:0;}
+
+/* Air Quality — US AQI remapped off the standard green/yellow/orange/red/
+   purple scale (unreadable under deuteranopia) onto this app's existing
+   blue/teal/amber/orange/purple family; see aqiBand() in app.js. Value +
+   text label are always shown, color is never the only signal. */
+.wx-aqi-val{font-size:32px; font-weight:800; line-height:1;}
+.wx-aqi-label{font-weight:700; font-size:12.5px; margin:4px 0 10px;}
+.wx-aqi-scale{height:7px; border-radius:4px; background:linear-gradient(90deg,#3b82f6,#06b6d4,#f5a524,#f97316,#a855f7,#6d28d9); position:relative;}
+.wx-aqi-marker{position:absolute; top:-3px; width:3px; height:13px; border-radius:2px; box-shadow:0 0 0 1.5px var(--panel);}
+
+.wx-uv-val{font-size:32px; font-weight:800; line-height:1;}
+.wx-uv-label{font-weight:700; font-size:12.5px; margin-top:4px;}
+
+.wx-wind-row{display:flex; align-items:center; gap:14px;}
+.wx-compass{width:50px; height:50px; border-radius:50%; border:2px solid var(--line2); position:relative; flex-shrink:0;}
+.wx-compass-arrow{
+  position:absolute; left:50%; top:50%; width:2px; height:18px; background:var(--accent); border-radius:2px;
+  transform-origin:top center; margin-left:-1px;
+}
+.wx-wind-stats div{font-size:13px; font-weight:700; color:var(--dim); margin-bottom:3px;}
+.wx-wind-stats b{color:var(--tx); font-size:16px;}
+
+.wx-sun-row{display:flex; justify-content:space-between; font-size:12.5px; font-weight:700; color:var(--dim); margin-bottom:6px;}
+.wx-sun-row b{color:var(--tx); font-size:14.5px; font-weight:800;}
+.wx-moon{display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12.5px; font-weight:700; color:var(--dim);}
+.wx-moon .ic{font-size:22px;}
+.wx-card .hint{padding:6px 0 0;}
 
 /* ---------------------------------------------------------- TICKER ----- */
 .trading-embed-frame{width:100%; height:calc(100% - 4px); border:0; border-radius:var(--radius); background:#07090d;}
@@ -567,7 +642,7 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
 
         <div class="h2-col">
           <div class="h2-card">
-            <div class="h2-card-head">
+            <div class="h2-card-head hc-month">
               <span>📅 Monthly</span>
               <span class="h2-nav">
                 <button class="h2-navbtn" id="h2MonthPrev">‹</button>
@@ -581,7 +656,7 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
             </div>
           </div>
           <div class="h2-card" style="flex:1;">
-            <div class="h2-card-head">
+            <div class="h2-card-head hc-week">
               <span>🗓️ Week</span>
               <span class="h2-nav">
                 <button class="h2-navbtn" id="h2WeekPrev">‹</button>
@@ -596,37 +671,37 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
 
         <div class="h2-col">
           <div class="h2-card" style="flex:1;">
-            <div class="h2-card-head"><span>🥬 Groceries — Wegmans</span></div>
+            <div class="h2-card-head hc-wegmans"><span>🥬 Groceries — Wegmans</span></div>
             <div class="h2-card-body" id="h2g-wegmans"></div>
           </div>
           <div class="h2-card" style="flex:1;">
-            <div class="h2-card-head"><span>🌶️ Groceries — Indian</span></div>
+            <div class="h2-card-head hc-indian"><span>🌶️ Groceries — Indian</span></div>
             <div class="h2-card-body" id="h2g-indian"></div>
           </div>
           <div class="h2-card" style="flex:1;">
-            <div class="h2-card-head"><span>📦 Groceries — Costco</span></div>
+            <div class="h2-card-head hc-costco"><span>📦 Groceries — Costco</span></div>
             <div class="h2-card-body" id="h2g-costco"></div>
           </div>
         </div>
 
         <div class="h2-col">
           <div class="h2-card">
-            <div class="h2-card-head"><span>⛅ Weather — Weekly</span></div>
+            <div class="h2-card-head hc-weather"><span>⛅ Weather — Weekly</span></div>
             <div class="h2-card-body h2-wx-body" id="h2WxDays"></div>
           </div>
           <div class="h2-card" style="flex:1;">
-            <div class="h2-card-head"><span>🗓️ Chores — Appts</span></div>
+            <div class="h2-card-head hc-appt"><span>🗓️ Chores — Appts</span></div>
             <div class="h2-card-body" id="h2c-appt"></div>
           </div>
           <div class="h2-card" style="flex:1;">
-            <div class="h2-card-head"><span>🏠 Chores — Household</span></div>
+            <div class="h2-card-head hc-household"><span>🏠 Chores — Household</span></div>
             <div class="h2-card-body" id="h2c-household"></div>
           </div>
         </div>
 
         <div class="h2-col">
           <div class="h2-card" style="flex:1;">
-            <div class="h2-card-head">
+            <div class="h2-card-head hc-watchlist">
               <span>📈 Markets Watchlist</span>
               <button class="h2-today" data-goto="ticker">Edit</button>
             </div>
@@ -685,8 +760,30 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
         <button class="btn ghost" id="wxRefresh">↻ Refresh</button>
       </div>
       <div class="wx-now" id="wxNow"></div>
+      <div class="wx-summary" id="wxSummary"></div>
       <div id="wxHourly"></div>
-      <div id="wxDays"></div>
+      <div class="wx-grid">
+        <div class="card wx-card wx-card-wide">
+          <div class="wx-card-title">📅 10-Day Forecast</div>
+          <div id="wxDays"></div>
+        </div>
+        <div class="card wx-card">
+          <div class="wx-card-title">💨 Air Quality</div>
+          <div id="wxAQI"></div>
+        </div>
+        <div class="card wx-card">
+          <div class="wx-card-title">🧭 Wind</div>
+          <div id="wxWind"></div>
+        </div>
+        <div class="card wx-card">
+          <div class="wx-card-title">🔆 UV Index</div>
+          <div id="wxUV"></div>
+        </div>
+        <div class="card wx-card">
+          <div class="wx-card-title">🌅 Sun &amp; Moon</div>
+          <div id="wxSun"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ========================================================== TICKER -->

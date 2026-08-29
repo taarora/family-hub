@@ -720,17 +720,79 @@ async function geocodeCity(q){
 let wxCache = null;
 async function fetchWeather(){
   if(CFG.weather.lat == null) return null;
+  // Widened 2026-08-29 to feed the fuller Weather tab (10-day outlook, wind
+  // detail, UV, sunrise/sunset) — same free, keyless Open-Meteo endpoint,
+  // just asking for more of what it already offers. forecast_days 6→10.
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${CFG.weather.lat}&longitude=${CFG.weather.lon}` +
-    `&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m` +
+    `&current=temperature_2m,apparent_temperature,weather_code,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
     `&hourly=temperature_2m,weather_code,precipitation_probability` +
-    `&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max` +
-    `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=6`;
+    `&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,uv_index_max,sunrise,sunset` +
+    `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=10`;
   const res = await fetch(url, {cache:"no-store"});
   if(!res.ok) throw new Error("weather HTTP "+res.status);
   const j = await res.json();
   wxCache = j;
   localStorage.setItem("hub_wx_cache", JSON.stringify({at:Date.now(), data:j}));
   return j;
+}
+// Separate endpoint (air-quality-api.open-meteo.com, same provider, no key)
+// — US AQI isn't part of the regular forecast API. Failure here shouldn't
+// block the rest of the weather tab, so it's fetched and cached
+// independently and just renders "—" if it's ever unavailable.
+let wxAqiCache = null;
+async function fetchAirQuality(){
+  if(CFG.weather.lat == null) return null;
+  const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${CFG.weather.lat}&longitude=${CFG.weather.lon}` +
+    `&current=us_aqi&timezone=auto`;
+  const res = await fetch(url, {cache:"no-store"});
+  if(!res.ok) throw new Error("air quality HTTP "+res.status);
+  const j = await res.json();
+  wxAqiCache = j;
+  localStorage.setItem("hub_wx_aqi_cache", JSON.stringify({at:Date.now(), data:j}));
+  return j;
+}
+// AQI band → colorblind-safe color + label. Standard US AQI is a 6-band
+// green→yellow→orange→red→purple→maroon scale — unusable as-is for
+// deuteranopia (green/orange/red all wash toward each other), so this
+// remaps to the app's existing blue/teal/amber/orange/purple family. The
+// numeric value + text label are always shown alongside the color, same
+// rule as everywhere else in this app: color is never the only signal.
+function aqiBand(v){
+  if(v == null) return {label:"—", color:"#8892a6"};
+  if(v <= 50)  return {label:"Good", color:"#3b82f6"};
+  if(v <= 100) return {label:"Moderate", color:"#06b6d4"};
+  if(v <= 150) return {label:"Unhealthy (sensitive)", color:"#f5a524"};
+  if(v <= 200) return {label:"Unhealthy", color:"#f97316"};
+  if(v <= 300) return {label:"Very unhealthy", color:"#a855f7"};
+  return {label:"Hazardous", color:"#6d28d9"};
+}
+// Moon phase — computed locally from a known new-moon reference date and
+// the synodic month length, not fetched: no free keyless API offers this,
+// but it's simple enough to be exact without one.
+function moonPhase(d){
+  const synodic = 29.530588853;
+  const knownNewMoon = Date.UTC(2000,0,6,18,14); // 2000-01-06 18:14 UTC
+  const days = (d.getTime() - knownNewMoon) / 86400000;
+  const age = ((days % synodic) + synodic) % synodic;
+  const frac = age / synodic;
+  const phases = [
+    {max:0.02,  icon:"🌑", label:"New Moon"},
+    {max:0.24,  icon:"🌒", label:"Waxing Crescent"},
+    {max:0.26,  icon:"🌓", label:"First Quarter"},
+    {max:0.49,  icon:"🌔", label:"Waxing Gibbous"},
+    {max:0.51,  icon:"🌕", label:"Full Moon"},
+    {max:0.74,  icon:"🌖", label:"Waning Gibbous"},
+    {max:0.76,  icon:"🌗", label:"Last Quarter"},
+    {max:0.99,  icon:"🌘", label:"Waning Crescent"},
+    {max:1.01,  icon:"🌑", label:"New Moon"},
+  ];
+  const p = phases.find(p=>frac<=p.max) || phases[phases.length-1];
+  return {icon:p.icon, label:p.label, age};
+}
+function windDirLabel(deg){
+  if(deg == null) return "—";
+  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return dirs[Math.round(deg/22.5) % 16];
 }
 function renderHourlyGraph(hours){
   const temps = hours.map(h=>h.t);
@@ -751,12 +813,88 @@ function renderTopWxChip(cur){
   if(!cur){ chip.innerHTML = ""; return; }
   chip.innerHTML = `<span class="ic">${wmoIcon(cur.weather_code)}</span>${Math.round(cur.temperature_2m)}°<span class="rh">💧${cur.relative_humidity_2m}%</span>`;
 }
+function renderWx10Day(data){
+  const host = document.getElementById("wxDays");
+  if(!host) return;
+  const days = data.daily.time.map((t,i)=>({
+    date:new Date(t), hi:data.daily.temperature_2m_max[i], lo:data.daily.temperature_2m_min[i],
+    code:data.daily.weather_code[i], pop:data.daily.precipitation_probability_max?.[i]
+  }));
+  // One shared hi/lo scale across all 10 days so each day's bar position is
+  // comparable at a glance (a 58° day's bar sits visibly left of an 84° day's),
+  // same idea as Apple Weather's 10-day list.
+  const scaleMin = Math.min(...days.map(d=>d.lo)), scaleMax = Math.max(...days.map(d=>d.hi));
+  const span = Math.max(1, scaleMax - scaleMin);
+  const today = new Date();
+  host.innerHTML = days.map(d=>{
+    const label = sameDay(d.date, today) ? "Today" : d.date.toLocaleDateString([], {weekday:"short"});
+    const leftPct = ((d.lo - scaleMin) / span) * 100;
+    const widthPct = Math.max(6, ((d.hi - d.lo) / span) * 100);
+    return `<div class="wx10-row">
+      <div class="wx10-day">${label}</div>
+      <div class="wx10-pop">${d.pop != null && d.pop >= 10 ? `💧${Math.round(d.pop)}%` : ""}</div>
+      <div class="wx10-ic">${wmoIcon(d.code)}</div>
+      <div class="wx10-lo">${Math.round(d.lo)}°</div>
+      <div class="wx10-bar-track"><div class="wx10-bar-fill" style="left:${leftPct}%; width:${widthPct}%;"></div></div>
+      <div class="wx10-hi">${Math.round(d.hi)}°</div>
+    </div>`;
+  }).join("");
+}
+function renderWxAQI(aqi){
+  const host = document.getElementById("wxAQI");
+  if(!host) return;
+  const v = aqi?.current?.us_aqi;
+  if(v == null){ host.innerHTML = `<div class="hint">Not available.</div>`; return; }
+  const band = aqiBand(v);
+  const pct = Math.min(100, Math.max(0, (v/300)*100));
+  host.innerHTML = `
+    <div class="wx-aqi-val" style="color:${band.color};">${Math.round(v)}</div>
+    <div class="wx-aqi-label" style="color:${band.color};">${band.label}</div>
+    <div class="wx-aqi-scale"><div class="wx-aqi-marker" style="left:${pct}%; background:${band.color};"></div></div>`;
+}
+function renderWxWind(data){
+  const host = document.getElementById("wxWind");
+  if(!host) return;
+  const cur = data.current;
+  if(cur.wind_speed_10m == null){ host.innerHTML = `<div class="hint">Not available.</div>`; return; }
+  const dir = cur.wind_direction_10m;
+  host.innerHTML = `
+    <div class="wx-wind-row">
+      <div class="wx-compass"><div class="wx-compass-arrow" style="transform:rotate(${dir ?? 0}deg);"></div></div>
+      <div class="wx-wind-stats">
+        <div><b>${Math.round(cur.wind_speed_10m)}</b> mph ${windDirLabel(dir)}</div>
+        ${cur.wind_gusts_10m != null ? `<div>Gusts to ${Math.round(cur.wind_gusts_10m)} mph</div>` : ""}
+      </div>
+    </div>`;
+}
+function renderWxUV(data){
+  const host = document.getElementById("wxUV");
+  if(!host) return;
+  const v = data.daily.uv_index_max?.[0];
+  if(v == null){ host.innerHTML = `<div class="hint">Not available.</div>`; return; }
+  const band = v <= 2 ? {label:"Low", color:"#3b82f6"} : v <= 5 ? {label:"Moderate", color:"#06b6d4"} :
+    v <= 7 ? {label:"High", color:"#f5a524"} : v <= 10 ? {label:"Very High", color:"#f97316"} : {label:"Extreme", color:"#a855f7"};
+  host.innerHTML = `
+    <div class="wx-uv-val" style="color:${band.color};">${Math.round(v)}</div>
+    <div class="wx-uv-label" style="color:${band.color};">${band.label}</div>`;
+}
+function renderWxSun(data){
+  const host = document.getElementById("wxSun");
+  if(!host) return;
+  const sunrise = data.daily.sunrise?.[0], sunset = data.daily.sunset?.[0];
+  const m = moonPhase(new Date());
+  host.innerHTML = `
+    <div class="wx-sun-row"><span>Sunrise</span><b>${sunrise ? new Date(sunrise).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}) : "—"}</b></div>
+    <div class="wx-sun-row"><span>Sunset</span><b>${sunset ? new Date(sunset).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}) : "—"}</b></div>
+    <div class="wx-moon"><span class="ic">${m.icon}</span>${m.label}</div>`;
+}
 async function renderWeather(){
   document.getElementById("wxLocLabel").textContent = "Weather" + (CFG.weather.label ? " · " + CFG.weather.label : "");
   if(CFG.weather.lat == null){
     document.getElementById("wxNow").innerHTML = `<div class="empty">Set your location in Settings to see weather.</div>`;
-    document.getElementById("wxHourly").innerHTML = "";
-    document.getElementById("wxDays").innerHTML = "";
+    ["wxSummary","wxHourly","wxDays","wxAQI","wxWind","wxUV","wxSun"].forEach(id=>{
+      const h = document.getElementById(id); if(h) h.innerHTML = "";
+    });
     renderTopWxChip(null);
     return;
   }
@@ -768,6 +906,16 @@ async function renderWeather(){
     const cached = localStorage.getItem("hub_wx_cache");
     if(cached) data = JSON.parse(cached).data;
   }
+  // Independent try/catch — a hiccup on the air-quality endpoint shouldn't
+  // blank out the rest of an otherwise-working weather tab.
+  let aqi = wxAqiCache;
+  try{
+    aqi = await fetchAirQuality();
+  }catch(e){
+    console.warn("air quality fetch failed", e);
+    const cached = localStorage.getItem("hub_wx_aqi_cache");
+    if(cached) aqi = JSON.parse(cached).data;
+  }
   if(!data) return;
   const cur = data.current;
   renderTopWxChip(cur);
@@ -778,6 +926,18 @@ async function renderWeather(){
       <div class="wx-desc">${wmoText(cur.weather_code)}</div>
       <div class="wx-meta"><span>💧 ${cur.relative_humidity_2m}%</span><span>💨 ${Math.round(cur.wind_speed_10m)} mph</span></div>
     </div>`;
+  // Short narrative line synthesized from today's own data (Open-Meteo
+  // doesn't provide one) — same spirit as the sentence at the top of
+  // Apple Weather, just built from numbers this app already has.
+  const todayHi = data.daily.temperature_2m_max[0], todayLo = data.daily.temperature_2m_min[0];
+  const gust = data.daily.wind_gusts_10m_max?.[0];
+  const feels = cur.apparent_temperature;
+  const feelsBit = (feels != null && Math.abs(Math.round(feels) - Math.round(cur.temperature_2m)) >= 3)
+    ? `Feels like ${Math.round(feels)}°. ` : "";
+  const gustBit = (gust != null && gust >= 15) ? `Wind gusts up to ${Math.round(gust)} mph.` : "";
+  const summaryEl = document.getElementById("wxSummary");
+  if(summaryEl) summaryEl.textContent =
+    `${wmoText(cur.weather_code)}, high ${Math.round(todayHi)}° · low ${Math.round(todayLo)}°. ${feelsBit}${gustBit}`.trim();
   const nowIdx = data.hourly.time.findIndex(t => new Date(t) >= new Date());
   const hrs = [];
   for(let i = Math.max(0,nowIdx); i < Math.min(data.hourly.time.length, Math.max(0,nowIdx)+16); i++){
@@ -785,15 +945,11 @@ async function renderWeather(){
   }
   const chips = hrs.map(hh => `<div class="wx-hour">${hh.time.toLocaleTimeString([], {hour:"numeric"})}<div>${wmoIcon(hh.code)}</div><div class="t">${Math.round(hh.t)}°</div></div>`).join("");
   document.getElementById("wxHourly").innerHTML = renderHourlyGraph(hrs) + `<div style="display:flex; gap:2px;">${chips}</div>`;
-  const days = data.daily.time.map((t,i)=>({
-    date:new Date(t), hi:data.daily.temperature_2m_max[i], lo:data.daily.temperature_2m_min[i], code:data.daily.weather_code[i]
-  })).slice(0,5);
-  document.getElementById("wxDays").innerHTML = days.map(d=>`
-    <div class="wx-day">
-      <div class="d">${d.date.toLocaleDateString([], {weekday:"short"})}</div>
-      <div class="ic">${wmoIcon(d.code)}</div>
-      <div class="hl">${Math.round(d.hi)}° <span class="lo">${Math.round(d.lo)}°</span></div>
-    </div>`).join("");
+  renderWx10Day(data);
+  renderWxAQI(aqi);
+  renderWxWind(data);
+  renderWxUV(data);
+  renderWxSun(data);
 }
 document.getElementById("wxRefresh").addEventListener("click", ()=>{ renderWeather(); toast("Refreshing weather…"); });
 document.getElementById("wxSearchBtn").addEventListener("click", async ()=>{
@@ -1150,11 +1306,19 @@ function renderH2Week(){
     if(!byDay.has(key)) byDay.set(key, []);
     byDay.get(key).push(e);
   });
+  // Solid colored `.day-evt` pills (same markup/classes as the original
+  // Home tab's day-card grid), not the subtler dot+text-tint `evtHtml()`
+  // treatment the Calendar screen uses — the user specifically liked
+  // Home's punchier coloring here and asked for it on Home 2 too.
   let html = "";
   for(const [key, evts] of byDay){
     const d = new Date(key);
     const label = sameDay(d, today) ? "Today" : d.toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"});
-    html += `<div class="h2-day-label">${label}</div>` + evts.map(evtHtml).join("");
+    html += `<div class="h2-day-label">${label}</div>` + evts.map(e=>`
+      <div class="day-evt ${CAT_META[e.cat].cls}">
+        <div class="de-title">${CAT_META[e.cat].icon} ${escapeHtml(e.title)}</div>
+        <div class="de-time">${fmtTime(e.occStart, e.allDay)}</div>
+      </div>`).join("");
   }
   host.innerHTML = html;
 }
