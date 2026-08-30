@@ -1592,9 +1592,25 @@ document.getElementById("settingsBackup").addEventListener("click", ()=>{
 });
 document.getElementById("settingsImport").addEventListener("click", ()=>{ document.getElementById("importModalBack").hidden = false; });
 document.getElementById("importCancel").addEventListener("click", ()=>{ document.getElementById("importModalBack").hidden = true; });
+document.getElementById("importFile").addEventListener("change", (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{ document.getElementById("importText").value = reader.result; };
+  reader.onerror = ()=>{ toast("Couldn't read that file"); };
+  reader.readAsText(f);
+  e.target.value = ""; // so picking the same file again still fires 'change'
+});
 document.getElementById("importApply").addEventListener("click", async ()=>{
   try{
-    const parsed = JSON.parse(document.getElementById("importText").value);
+    let parsed = JSON.parse(document.getElementById("importText").value);
+    // A Backup Data snapshot nests the real settings under `.config`
+    // (alongside items/recipes arrays) rather than being the flat settings
+    // object Export Config produces — unwrap it so loading either file here
+    // does the sensible thing instead of merging junk top-level keys onto CFG.
+    if(parsed && typeof parsed === "object" && parsed.config && typeof parsed.config === "object"){
+      parsed = parsed.config;
+    }
     CFG = deepMerge(structuredClone(DEFAULTS), parsed);
     saveCfg();
     loadSettingsUI();

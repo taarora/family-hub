@@ -1,8 +1,14 @@
 #!/bin/bash
 # Recurring commit/push helper for the family-hub repo.
 # Usage:
-#   ./git.sh "commit message"     -> commit only these files, then push
-#   ./git.sh                      -> uses a timestamped default message
+#   bash git.sh "commit message"  -> commit only these files, then push
+#   bash git.sh                   -> uses a timestamped default message
+#
+# Run it with `bash git.sh`, not `./git.sh` — this repo folder is reached
+# through a synced/bridged mount that doesn't reliably keep the executable
+# bit set after an edit, so `./git.sh` can randomly need a `chmod +x` first.
+# `bash git.sh` sidesteps that entirely since it doesn't need the file to be
+# marked executable at all.
 #
 # Only adds the known app files by name (never `git add -A`) so a local
 # backup JSON, SETTINGS-CHEATSHEET.md, or anything else stray never gets

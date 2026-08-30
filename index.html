@@ -891,7 +891,12 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
   <div class="modal-back" id="importModalBack" hidden>
     <div class="modal">
       <h3>Import Config</h3>
-      <div class="field"><textarea id="importText" placeholder="Paste exported config JSON here…" style="min-height:160px;"></textarea></div>
+      <div class="field">
+        <label>Load the exported file</label>
+        <input type="file" id="importFile" accept="application/json,.json">
+      </div>
+      <div class="hint" style="margin:2px 0 10px;">Picks up the file from Export Config (family-hub-config.json) or a Backup Data snapshot — either fills in the box below, which you can also just paste into directly.</div>
+      <div class="field"><textarea id="importText" placeholder="…or paste exported config JSON here" style="min-height:160px;"></textarea></div>
       <div class="actions">
         <button class="btn ghost" id="importCancel">Cancel</button>
         <button class="btn primary" id="importApply">Apply</button>
