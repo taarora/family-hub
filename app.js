@@ -1555,6 +1555,21 @@ document.getElementById("settingsExport").addEventListener("click", async ()=>{
     const ta = document.createElement("textarea"); ta.value = json; document.body.appendChild(ta); ta.select();
     document.execCommand("copy"); ta.remove(); toast("Config copied to clipboard");
   }
+  // Also trigger a download with a FIXED filename (unlike Backup Data's
+  // timestamped snapshots) — a browser can't reach an arbitrary folder on
+  // disk directly, but if this device's browser has its default downloads
+  // location pointed at repos/family-hub/config/, repeated exports just land
+  // there and overwrite in place, giving every device one real file to grab
+  // from instead of only a clipboard paste. See SETUP.md.
+  const blob = new Blob([json], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "family-hub-config.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 });
 document.getElementById("settingsBackup").addEventListener("click", ()=>{
   const payload = {

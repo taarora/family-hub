@@ -11,7 +11,7 @@
 set -e
 cd "$(dirname "$0")"
 
-FILES=(index.html app.js manifest.json sw.js icon-192.png icon-512.png SETUP.md .gitignore public_client.py git.sh)
+FILES=(index.html app.js manifest.json sw.js icon-192.png icon-512.png SETUP.md .gitignore public_client.py git.sh config/.gitkeep)
 
 echo "== Fetching origin to check you're up to date =="
 git fetch origin

@@ -10,3 +10,8 @@ __pycache__/
 # Local backup snapshots from the app's "Backup Data" button — these contain
 # real family data (chores/groceries/recipes) and this repo is public.
 family-hub-backup-*.json
+
+# Exported Hub settings land here (see Settings -> Export Config) if a
+# browser's downloads location is pointed at this folder. Contains the same
+# sensitive values as SETTINGS-CHEATSHEET.md, so it's git-ignored the same way.
+config/*.json

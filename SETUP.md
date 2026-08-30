@@ -122,7 +122,7 @@ Your ticker heatmap already exists in the trading project (`web/wall.html`) and 
 **Not installed yet as of 2026-08-30** — this section is the plan for when you do. Mealie (https://github.com/mealie-recipes/mealie) is a free, self-hosted recipe manager/meal planner with URL import, meal planning, and shopping lists. Same tradeoff as Markets above: it runs on your Mac, so the Recipes tab can only reach it while your Mac + Mealie are on and the device is on the same Wi-Fi.
 
 1. Install Docker Desktop on your Mac if you don't have it already.
-2. Create a folder for it (e.g. `~/mealie`) with a `docker-compose.yml`:
+2. The compose file already lives at `~/Documents/Claude/Code/repos/mealie/docker-compose.yml` (a sibling folder to this repo — not part of family-hub itself, so it never gets committed/pushed here):
    ```yaml
    services:
      mealie:
@@ -168,6 +168,8 @@ All in **Settings**:
 ## 7. Copying settings to another device
 
 Rather than re-typing all of the above on every iPad/iPhone/laptop: on the device you just configured, **Settings → Export Config** copies everything to your clipboard as text. On the next device, paste it into **Settings → Import Config → Apply**. (Firebase family ID has to match anyway for sync to work, so this saves the most typing.)
+
+**Optional, on the Mac only:** Export Config also triggers a file download named `family-hub-config.json` (same filename every time, so repeat exports overwrite it rather than piling up like Backup Data's timestamped snapshots). If you point your Mac browser's default downloads folder at `~/Documents/Claude/Code/repos/family-hub/config/` (Safari: Settings → General → File download location; Chrome: Settings → Downloads), every export from the Mac lands there automatically as a real file you can glance at or hand to me — it's git-ignored, so it never gets pushed. This doesn't work across devices by itself, though — a browser can't reach into another device's folders. From the iPad/iPhone the same download just lands in Files/iCloud on that device; getting it onto the Mac still needs AirDrop, or you can skip the file entirely and just paste the clipboard text into Import Config on the other device.
 
 ---
 
