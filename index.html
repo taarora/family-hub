@@ -92,15 +92,15 @@ input,textarea{font-family:inherit;}
 
 /* ------------------------------------------------------------------- nav */
 #screenNav{
-  display:flex; gap:8px; padding:8px 12px; background:var(--bg2);
+  display:flex; gap:6px; padding:5px 10px; background:var(--bg2);
   border-bottom:1px solid var(--line); overflow-x:auto; flex-shrink:0;
 }
 .navbtn{
-  flex:1; min-width:84px; padding:10px 6px; border-radius:14px; border:1px solid transparent;
-  background:transparent; color:var(--dim); display:flex; flex-direction:column; align-items:center; gap:4px;
-  font-size:12.5px; font-weight:700; cursor:pointer; letter-spacing:.01em;
+  flex:1; min-width:72px; padding:6px 6px; border-radius:12px; border:1px solid transparent;
+  background:transparent; color:var(--dim); display:flex; flex-direction:column; align-items:center; gap:2px;
+  font-size:11px; font-weight:700; cursor:pointer; letter-spacing:.01em;
 }
-.navbtn .ic{font-size:22px;}
+.navbtn .ic{font-size:18px;}
 .navbtn.active{background:var(--panel); border-color:var(--line); color:var(--tx); box-shadow:var(--shadow);}
 .navbtn.active .ic{filter:none;}
 .navbtn[hidden]{display:none;}
@@ -513,12 +513,12 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
   <header id="topbar">
     <div class="brand"><span class="dot"></span>Family Hub</div>
     <div id="dateLine"></div>
+    <div id="clock">--:--</div>
     <div class="wx-chip" id="topWxChip"></div>
     <div class="topspacer"></div>
     <div id="rotDots"></div>
     <button class="iconbtn" id="btnRotate" title="Pause/resume rotation">⏵</button>
     <button class="iconbtn" id="btnTheme" title="Light / dark">🌙</button>
-    <div id="clock">--:--</div>
   </header>
 
   <nav id="screenNav">
@@ -731,6 +731,14 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
     <section class="screen" id="screen-recipes">
       <div class="row between" style="margin-bottom:10px;">
         <h2 class="title" style="margin:0;">Recipes</h2>
+        <button class="btn ghost" id="mealieRetry">↻ Retry</button>
+      </div>
+
+      <h3 style="margin:0 0 10px; font-size:15px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em;">Mealie</h3>
+      <div id="mealieHost" style="min-height:56vh; margin-bottom:22px;"></div>
+
+      <div class="row between" style="margin-bottom:10px;">
+        <h3 style="margin:0; font-size:15px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em;">Quick Notes</h3>
         <button class="btn primary" id="recipeAdd">+ New Recipe</button>
       </div>
       <input id="recipeSearch" type="text" placeholder="Search recipes or tags…">
@@ -824,6 +832,15 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
           <input type="text" id="setWallUrl" placeholder="http://192.168.1.23:5056">
         </div>
         <div class="hint">The Markets tab shows a read-only card for each open trade (same numbers as the trading app — closing/rolling/assigning still happens there, not here). Only reachable while your Mac and the trading server are on and this device is on the same Wi-Fi. See SETUP.md.</div>
+      </div>
+
+      <div class="set-section">
+        <h3>Recipes / Mealie</h3>
+        <div class="field">
+          <label>Mealie address (your self-hosted Mealie, on your home network)</label>
+          <input type="text" id="setMealieUrl" placeholder="http://192.168.1.23:9925">
+        </div>
+        <div class="hint">The Recipes tab embeds your Mealie site — full recipe search, meal planner, and shopping lists. Only reachable while your Mac and Mealie are on and this device is on the same Wi-Fi (same limitation as Open Trades above). See SETUP.md.</div>
       </div>
 
       <div class="set-section">

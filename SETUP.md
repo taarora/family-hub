@@ -117,6 +117,45 @@ Your ticker heatmap already exists in the trading project (`web/wall.html`) and 
 
 ---
 
+## 5b. Recipes / Mealie (self-hosted recipe manager)
+
+**Not installed yet as of 2026-08-30** — this section is the plan for when you do. Mealie (https://github.com/mealie-recipes/mealie) is a free, self-hosted recipe manager/meal planner with URL import, meal planning, and shopping lists. Same tradeoff as Markets above: it runs on your Mac, so the Recipes tab can only reach it while your Mac + Mealie are on and the device is on the same Wi-Fi.
+
+1. Install Docker Desktop on your Mac if you don't have it already.
+2. Create a folder for it (e.g. `~/mealie`) with a `docker-compose.yml`:
+   ```yaml
+   services:
+     mealie:
+       image: ghcr.io/mealie-recipes/mealie:v3.24.0
+       container_name: mealie
+       restart: always
+       ports:
+         - "9925:9000"
+       deploy:
+         resources:
+           limits:
+             memory: 1000M
+       volumes:
+         - mealie-data:/app/data/
+       environment:
+         ALLOW_SIGNUP: "false"
+         PUID: 1000
+         PGID: 1000
+         TZ: America/New_York
+
+   volumes:
+     mealie-data:
+   ```
+3. From that folder, run `docker compose up -d`. Visit `http://localhost:9925` on the Mac to finish the one-time account setup.
+4. Find your Mac's local IP (**System Settings → Wi-Fi → Details**, e.g. `192.168.1.xx`) — same IP as the trading server if it's the same Mac.
+5. In the Hub → **Settings → Recipes / Mealie** → enter `http://192.168.1.xx:9925` → Save.
+6. The Recipes tab now embeds the real Mealie site (search, meal planner, shopping lists) whenever the Mac + Mealie are on and the device is on the same Wi-Fi. Your existing "Quick Notes" recipe cards below it are untouched — that's the Hub's own separate, always-available list, not replaced by Mealie.
+7. Same mixed-content caveat as Markets: since the Hub loads over `https` and Mealie is plain `http`, the tab shows an **"Open in Safari"** button instead of a true embed — this is a browser security rule, not a bug.
+
+**Later, if you want recipes to work away from home Wi-Fi too**: this would mean exposing Mealie through a tunnel (e.g. Cloudflare Tunnel, same account as the Markets quotes Worker) and building a small proxy so the Hub can pull recipe data directly and render native cards instead of embedding Mealie's UI. Bigger lift — ask if/when you want to go there.
+
+---
+
 ## 6. Screen rotation, dark/light, night dimming
 
 All in **Settings**:

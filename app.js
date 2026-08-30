@@ -26,6 +26,7 @@ const DEFAULTS = {
   icsUrl: "",
   rtdbUrl: "",
   wallUrl: "",
+  mealieUrl: "",
   weather: { lat:null, lon:null, label:"" },
   keywords: {
     travel:  "trip,flight,airport,vacation,hotel,travel,road trip,fly,departure,layover",
@@ -122,7 +123,7 @@ function goto(screen){
   if(screen === "weather") renderWeather();
   if(screen === "ticker"){ renderTicker(); renderMarketsWatchlist(); }
   if(screen === "list") renderList();
-  if(screen === "recipes") renderRecipes();
+  if(screen === "recipes"){ renderRecipes(); renderMealie(); }
   if(screen === "home2") renderHome2();
 }
 
@@ -1020,12 +1021,14 @@ async function reachable(url, timeoutMs=2500){
 // the two never quietly drift into different behavior for the same failure.
 async function renderTradingEmbed(host, url, opts){
   const o = opts || {};
-  const emptyMsg = o.emptyMsg || "No trading server address set.";
+  const service = o.service || "trading app";
+  const icon = o.icon || "📈";
+  const emptyMsg = o.emptyMsg || `No ${service} address set.`;
   const offMsg = o.offMsg || "Isn't reachable.";
   const compact = !!o.compact;
-  const big = compact ? "" : `<div class="big">📈</div>`;
+  const big = compact ? "" : `<div class="big">${icon}</div>`;
   if(!url){
-    host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">${big}<div>${escapeHtml(emptyMsg)}</div>${compact?'':'<div class="hint">Add your trading app\'s network address in Settings.</div>'}</div>`;
+    host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">${big}<div>${escapeHtml(emptyMsg)}</div>${compact?'':`<div class="hint">Add your ${escapeHtml(service)}'s network address in Settings.</div>`}</div>`;
     return;
   }
   // A page served securely (https, e.g. GitHub Pages) can't embed a plain-http
@@ -1036,7 +1039,7 @@ async function renderTradingEmbed(host, url, opts){
     host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">
       ${compact ? '<div class="big" style="font-size:22px;">🔒</div>' : '<div class="big">🔒</div>'}
       <div>Can't embed this here.</div>
-      ${compact ? '' : `<div class="hint">This Hub loads securely (https), but your Markets link is plain http (${escapeHtml(url)}) — browsers block mixing the two, even on your home Wi-Fi. Opening it in Safari works fine instead.</div>`}
+      ${compact ? '' : `<div class="hint">This Hub loads securely (https), but your ${escapeHtml(service)} link is plain http (${escapeHtml(url)}) — browsers block mixing the two, even on your home Wi-Fi. Opening it in Safari works fine instead.</div>`}
       <button class="btn ${compact?'ghost':'primary'} embed-open-ext" style="margin-top:6px;">Open in Safari ↗</button>
     </div>`;
     host.querySelector(".embed-open-ext").addEventListener("click", ()=>{ window.open(url, "_blank"); });
@@ -1045,7 +1048,7 @@ async function renderTradingEmbed(host, url, opts){
   if(!compact) host.innerHTML = `<div class="ticker-off"><div class="big">⏳</div><div>Checking connection…</div></div>`;
   const ok = await reachable(url);
   if(!ok){
-    host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">${compact?'':'<div class="big">📴</div>'}<div>${escapeHtml(offMsg)}</div>${compact?'':`<div class="hint">Make sure your Mac and the trading server are on, and this device is on the same Wi-Fi as ${escapeHtml(url)}.</div>`}</div>`;
+    host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">${compact?'':'<div class="big">📴</div>'}<div>${escapeHtml(offMsg)}</div>${compact?'':`<div class="hint">Make sure your Mac and ${escapeHtml(service)} are on, and this device is on the same Wi-Fi as ${escapeHtml(url)}.</div>`}</div>`;
     return;
   }
   host.innerHTML = `<iframe class="trading-embed-frame" src="${escapeAttr(url)}"></iframe>`;
@@ -1053,9 +1056,16 @@ async function renderTradingEmbed(host, url, opts){
 async function renderTicker(){
   const host = document.getElementById("tickerHost");
   const url = openCardsUrl(CFG.wallUrl);
-  await renderTradingEmbed(host, url, {offMsg:"Open Trades page isn't reachable."});
+  await renderTradingEmbed(host, url, {service:"trading server", icon:"📈", emptyMsg:"No trading server address set.", offMsg:"Open Trades page isn't reachable."});
 }
 document.getElementById("tickerRetry").addEventListener("click", renderTicker);
+
+async function renderMealie(){
+  const host = document.getElementById("mealieHost");
+  const url = normalizeWallUrl(CFG.mealieUrl);
+  await renderTradingEmbed(host, url, {service:"Mealie", icon:"🍳", emptyMsg:"No Mealie address set.", offMsg:"Mealie isn't reachable."});
+}
+document.getElementById("mealieRetry").addEventListener("click", renderMealie);
 
 /* ------------------------------------------------- 7b. MARKETS WATCHLIST */
 // Editing lives here, on the Markets tab — the "main tab" for anything
@@ -1494,6 +1504,7 @@ function loadSettingsUI(){
   document.getElementById("kwFriends").value = CFG.keywords.friends;
   document.getElementById("wxCurrentLoc").textContent = CFG.weather.label || "not set";
   document.getElementById("setWallUrl").value = CFG.wallUrl;
+  document.getElementById("setMealieUrl").value = CFG.mealieUrl;
   document.getElementById("fbApiKey").value = CFG.firebase.apiKey;
   document.getElementById("fbAuthDomain").value = CFG.firebase.authDomain;
   document.getElementById("fbProjectId").value = CFG.firebase.projectId;
@@ -1522,6 +1533,7 @@ document.getElementById("settingsSave").addEventListener("click", async ()=>{
   CFG.keywords.doctor = document.getElementById("kwDoctor").value;
   CFG.keywords.friends = document.getElementById("kwFriends").value;
   CFG.wallUrl = normalizeWallUrl(document.getElementById("setWallUrl").value.trim());
+  CFG.mealieUrl = normalizeWallUrl(document.getElementById("setMealieUrl").value.trim());
   CFG.firebase = {
     apiKey: document.getElementById("fbApiKey").value.trim(),
     authDomain: document.getElementById("fbAuthDomain").value.trim(),

@@ -6,3 +6,7 @@ SETTINGS-CHEATSHEET.md
 # Python cache from public_client.py testing
 __pycache__/
 *.pyc
+
+# Local backup snapshots from the app's "Backup Data" button — these contain
+# real family data (chores/groceries/recipes) and this repo is public.
+family-hub-backup-*.json
