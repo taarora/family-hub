@@ -30,7 +30,7 @@ const DEFAULTS = {
   keywords: {
     travel:  "trip,flight,airport,vacation,hotel,travel,road trip,fly,departure,layover",
     photo:   "photo,shoot,astro,night sky,milky way,aurora,star party,timelapse,photography",
-    doctor:  "doctor,dentist,dr.,appt,appointment,physical,checkup,check-up,clinic,hospital,eye exam,vet,dermatolog,cardiolog",
+    doctor:  "doctor,dentist,dr.,dr-,appt,appointment,physical,checkup,check-up,clinic,hospital,eye exam,vet,dermatolog,cardiolog",
     friends: "lunch,dinner,coffee,drinks,brunch,friend,meetup,meet up,hang,bbq,party,gathering,happy hour"
   },
   firebase: { apiKey:"", authDomain:"", projectId:"", appId:"", familyId:"" }
