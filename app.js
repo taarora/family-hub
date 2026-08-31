@@ -37,13 +37,22 @@ const DEFAULTS = {
   firebase: { apiKey:"", authDomain:"", projectId:"", appId:"", familyId:"" }
 };
 
+// structuredClone() only exists on iPadOS 15.4+ (spring 2022) — older iPads
+// throw a ReferenceError the instant this runs, which happens right at boot,
+// before a single event listener anywhere in the file gets wired up. That's
+// a silent, total freeze with no error the user can see, not a real crash.
+// JSON round-tripping is a safe universal fallback since DEFAULTS is plain
+// JSON-safe data (no functions, Dates, undefined, etc).
+function cloneDefaults(){
+  return typeof structuredClone === "function" ? structuredClone(DEFAULTS) : JSON.parse(JSON.stringify(DEFAULTS));
+}
 function loadCfg(){
   try{
     const raw = localStorage.getItem("hubConfig");
-    if(!raw) return structuredClone(DEFAULTS);
+    if(!raw) return cloneDefaults();
     const parsed = JSON.parse(raw);
-    return deepMerge(structuredClone(DEFAULTS), parsed);
-  }catch(e){ return structuredClone(DEFAULTS); }
+    return deepMerge(cloneDefaults(), parsed);
+  }catch(e){ return cloneDefaults(); }
 }
 function deepMerge(base, extra){
   for(const k in extra){
@@ -1611,7 +1620,7 @@ document.getElementById("importApply").addEventListener("click", async ()=>{
     if(parsed && typeof parsed === "object" && parsed.config && typeof parsed.config === "object"){
       parsed = parsed.config;
     }
-    CFG = deepMerge(structuredClone(DEFAULTS), parsed);
+    CFG = deepMerge(cloneDefaults(), parsed);
     saveCfg();
     loadSettingsUI();
     applyTheme(); applyNightDim(); renderNavVisibility(); renderRotDots(); reapplyRotation();
