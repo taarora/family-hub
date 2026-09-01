@@ -10,8 +10,9 @@ Do these roughly in order. Budget about 20–30 minutes total, most of it Fireba
 
 ## 0. Quick tour
 
-- **Home** — left: "This Week" with colored count-pills per calendar category (Travel/Photography/Doctor/Friends) and a 6-day card grid of what's coming up. Right: **Chores** (your combined to-do list, tap to check off) and **Grocery List** (pick a store from the dropdown, or "All Stores").
+- **Home** — a 4-column dashboard, each card a different accent color (never red/green, so it's clear at a glance regardless of color vision): **Monthly** mini-calendar + **Week** view (colored by event category, same coloring as the Calendar tab); three **Groceries** cards, one per store (Wegmans, Indian, Costco); **Weather — Weekly** strip + **Chores — Appointments** + **Chores — Household**; and **Markets Watchlist** (live quotes, refresh button, 52-week-high column — see section 5, this card works even when your Mac/trading server is off).
 - **Lists screen** — two tabs: **Chores** (flat checklist, add at the top) and **Grocery** (four columns — Indian, Wegmans, Trader Joe's, Costco — each with its own add box, so items file straight into the right store).
+- **Meds** — editable medication lists, one card per person (Tarun's list is pre-filled; add Ruchi's or anyone else's with "+ Add medication"). Each row has a color dot for time-of-day (Morning/Evening/Morning & evening/Weekly/Every other week — legend at the top), editable Name/Units/TOD (times per day)/Time fields, and a Push checkbox to flag a medication for phone-push reminders later (checked by default on your critical meds — currently Plavix and Aspirin; actual push delivery isn't wired up yet). On iPhone the Push and delete columns are hidden to keep it readable — do the checkbox/delete edits from an iPad or the Mac where there's more room; the fields themselves are always editable everywhere.
 - Everything else (Calendar, Weather, Markets, Recipes, Settings) is as described below.
 
 ---
@@ -105,7 +106,10 @@ Blue travel, green photography, red doctor, orange friends — done by matching 
 
 ## 5. Markets / Ticker Wall (your existing trading app)
 
-Your ticker heatmap already exists in the trading project (`web/wall.html`) and runs its own local server on your Mac at port 5056. The Hub just opens that as a screen — it can't run without your Mac and the trading server being on, since that's where the live price data comes from. That's an inherent tradeoff of reusing it rather than rebuilding a separate live-data pipeline.
+There are two different market-data spots in the Hub now, with two different dependencies:
+
+- **Home's "Markets Watchlist" card** — a short list of tickers you pick (Settings → Markets → add tickers), showing last price, change, and 52-week-high. This pulls live quotes from a small Cloudflare Worker (`family-hub-quotes.taarora-b77.workers.dev`), not from your Mac — it works whether or not the Mac/trading server is on. Has its own refresh button (⟳) on the card, and also auto-refreshes every 60 seconds while Home is on screen. If the Worker itself ever needs updating (e.g. Yahoo Finance changes its response shape), that's edited in the Cloudflare dashboard, not in this repo.
+- **The Markets tab** (full ticker heatmap) — this is still your existing trading project's `web/wall.html`, running its own local server on your Mac at port 5056. The Hub just opens that as a screen — it can't run without your Mac and the trading server being on, since that's where the live price data comes from. That's an inherent tradeoff of reusing it rather than rebuilding a separate live-data pipeline.
 
 1. On your Mac, start the trading app's server as usual (the one that serves `wall.html` on port 5056).
 2. Find your Mac's local IP (**System Settings → Wi-Fi → Details** → look for an address like `192.168.1.xx`).
@@ -119,7 +123,7 @@ Your ticker heatmap already exists in the trading project (`web/wall.html`) and 
 
 ## 5b. Recipes / Mealie (self-hosted recipe manager)
 
-**Not installed yet as of 2026-08-30** — this section is the plan for when you do. Mealie (https://github.com/mealie-recipes/mealie) is a free, self-hosted recipe manager/meal planner with URL import, meal planning, and shopping lists. Same tradeoff as Markets above: it runs on your Mac, so the Recipes tab can only reach it while your Mac + Mealie are on and the device is on the same Wi-Fi.
+**Installed and configured as of 2026-08-30** — Mealie (https://github.com/mealie-recipes/mealie) is a free, self-hosted recipe manager/meal planner with URL import, meal planning, and shopping lists, running on the Mac. Same tradeoff as Markets above: it runs on your Mac, so the Recipes tab can only reach it while your Mac + Mealie are on and the device is on the same Wi-Fi. Steps below are for reference / setting it up again elsewhere.
 
 1. Install Docker Desktop on your Mac if you don't have it already.
 2. The compose file already lives at `~/Documents/Claude/Code/repos/mealie/docker-compose.yml` (a sibling folder to this repo — not part of family-hub itself, so it never gets committed/pushed here):
@@ -155,6 +159,18 @@ Your ticker heatmap already exists in the trading project (`web/wall.html`) and 
 **Later, if you want recipes to work away from home Wi-Fi too**: this would mean exposing Mealie through a tunnel (e.g. Cloudflare Tunnel, same account as the Markets quotes Worker) and building a small proxy so the Hub can pull recipe data directly and render native cards instead of embedding Mealie's UI. Bigger lift — ask if/when you want to go there.
 
 ---
+
+## 5c. Cloudflare Worker (powers the Markets Watchlist card's live quotes)
+
+Home's "Markets Watchlist" card gets its prices from a small Cloudflare Worker, `family-hub-quotes.taarora-b77.workers.dev` (Cloudflare account: `Taarora@yahoo.com's Account`), which proxies Yahoo Finance's chart endpoint and returns last price, change, and 52-week-high for whatever tickers the Hub asks for. This is separate from — and doesn't need — your Mac or the trading server.
+
+You won't normally need to touch this; it's here for reference if the Worker ever needs updating (e.g. Yahoo changes its response format and quotes stop showing):
+
+1. Go to the Cloudflare dashboard → **Workers & Pages** → `family-hub-quotes`.
+2. Open the code editor (paste new code directly into the Monaco editor there — it can't be typed in via browser automation, has to be pasted by hand).
+3. Click **Deploy**. If the Deploy button is greyed out, that means it sees no unsaved changes (i.e., it's already deployed) — not that something failed.
+4. Test it by visiting `https://family-hub-quotes.taarora-b77.workers.dev/?symbols=AAPL` directly in a browser tab — a bare visit with no `?symbols=` param correctly returns `{"quotes":{}}`, that's expected, not an error.
+5. CORS is locked to `https://taarora.github.io` only, so the Worker won't respond usefully from anywhere else.
 
 ## 6. Screen rotation, dark/light, night dimming
 

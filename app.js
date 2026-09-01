@@ -1099,7 +1099,7 @@ function renderMarketsWatchlist(){
   const list = [...watchlistStore.list].sort((a,b)=>(a.ticker||"").localeCompare(b.ticker||""));
   host.innerHTML = list.length ? list.map(w=>`
     <span class="wl-chip" data-id="${w.id}">${escapeHtml(w.ticker)}<button class="wl-chip-x" data-id="${w.id}" aria-label="Remove ${escapeHtml(w.ticker)}">✕</button></span>
-  `).join("") : `<div class="hint">No tickers yet — add one above to show it on Home 2's watchlist card.</div>`;
+  `).join("") : `<div class="hint">No tickers yet — add one above to show it on Home's watchlist card.</div>`;
   host.querySelectorAll(".wl-chip-x").forEach(btn=>{
     btn.addEventListener("click", ()=>watchlistStore.remove(btn.dataset.id));
   });
@@ -1189,7 +1189,7 @@ function medsPersonCardHtml(person){
     <div class="meds-card-head ${cls}"><span>${escapeHtml(person)} — Med List</span></div>
     <div class="meds-card-body">
       <table class="meds-table">
-        <thead><tr><th class="mc-check">Push</th><th>Meds List</th><th>Units</th><th>Times/Day</th><th>Time</th><th></th></tr></thead>
+        <thead><tr><th class="mc-check">Push</th><th>Meds List</th><th>Units</th><th title="Times per Day">TOD</th><th>Time</th><th class="mc-del"></th></tr></thead>
         <tbody>${rows.length ? rows.map(medsRowHtml).join("") : `<tr><td colspan="6" class="empty">No medications yet.</td></tr>`}</tbody>
       </table>
       <div class="meds-addrow"><button class="btn ghost meds-add" data-person="${escapeAttr(person)}">+ Add medication</button></div>

@@ -350,6 +350,15 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
 }
 .meds-del:active{transform:scale(.9); color:var(--bad);}
 .meds-addrow{padding:8px 8px 2px;}
+@media (max-width:620px){
+  /* iPhone: editing happens on iPad/desktop where there's more room, so hide
+     the push-notify checkbox and delete columns here — view-only on iPhone. */
+  .meds-table th.mc-check, .meds-table td.mc-check,
+  .meds-table th.mc-del, .meds-table td.mc-del{display:none;}
+  .meds-table th{padding:8px 4px 5px; font-size:9.5px;}
+  .meds-row td{padding:4px 3px;}
+  .meds-field{padding:6px 4px; font-size:12.5px;}
+}
 
 /* ---------------------------------------------------------- CALENDAR --- */
 .viewtabs{display:flex; gap:8px; margin-bottom:14px;}
@@ -748,7 +757,7 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
       <div class="card" style="margin-bottom:16px;">
         <div class="row between" style="margin-bottom:10px;">
           <b>📈 Watchlist</b>
-          <span class="hint">Shown on Home 2's watchlist card. Prices need the trading server, same as Open Trades below.</span>
+          <span class="hint">Shown on Home's watchlist card — live quotes work even when your Mac is off. Open Trades below still needs the trading server.</span>
         </div>
         <div class="row" style="margin-bottom:10px;">
           <input type="text" id="watchlistInput" placeholder="Add a ticker, e.g. AAPL" autocomplete="off" style="flex:1; min-height:44px; border-radius:12px; border:1px solid var(--line); background:var(--panel2); color:var(--tx); padding:0 12px; text-transform:uppercase;">
