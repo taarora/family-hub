@@ -1320,13 +1320,20 @@ async function renderH2Watchlist(){
       <td class="sym">${escapeHtml(sym)}</td>
       <td class="num">${q ? num2(q.last) : "—"}</td>
       <td class="num ${chgClass}">${q ? arrow + pctStr(q.change_pct) : "—"}</td>
+      <td class="num">${q && q.fifty_two_week_high != null ? num2(q.fifty_two_week_high) : "—"}</td>
     </tr>`;
   }).join("");
   host.innerHTML = `<table class="h2-quote-table">
-    <thead><tr><th>Ticker</th><th class="num">Last</th><th class="num">% Chg</th></tr></thead>
+    <thead><tr><th>Ticker</th><th class="num">Last</th><th class="num">% Chg</th><th class="num">52WH</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
 }
+document.getElementById("h2WatchlistRefresh")?.addEventListener("click", (e)=>{
+  e.stopPropagation();
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  renderH2Watchlist().finally(()=>{ btn.disabled = false; });
+});
 function renderHome2(){
   renderH2Month();
   renderH2Week();

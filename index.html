@@ -185,6 +185,13 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
 #screen-home2 .h2-grid{
   display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:14px; height:calc(100% - 2px); align-items:stretch;
 }
+/* Grocery/chore rows reuse the Lists tab's `.list-item`/`.list-text`, which
+   is sized (15px) for that tab's own full-width rows — next to the Week
+   card's 12px day-evt titles on Home it read oversized and fit fewer rows.
+   Scoped to #screen-home2 only, so the Lists tab itself is untouched. */
+#screen-home2 .list-item{padding:6px 4px; gap:8px;}
+#screen-home2 .check{width:22px; height:22px; border-radius:7px; font-size:13px;}
+#screen-home2 .list-text{font-size:12px;}
 @media (max-width:1180px){ #screen-home2 .h2-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); height:auto; } }
 @media (max-width:620px){ #screen-home2 .h2-grid{ grid-template-columns:minmax(0,1fr); } }
 .h2-col{display:flex; flex-direction:column; gap:14px; min-height:0;}
@@ -225,6 +232,7 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
   font-size:14px; line-height:1; cursor:pointer; flex-shrink:0;
 }
 .h2-navbtn:active{transform:scale(.9);}
+.h2-navbtn:disabled{opacity:.5;}
 .h2-today{
   min-height:0; padding:3px 8px; border-radius:8px; border:none; background:rgba(255,255,255,.22); color:#fff;
   font-weight:800; font-size:10.5px; cursor:pointer; flex-shrink:0; margin-left:2px;
@@ -263,10 +271,10 @@ h2.title{margin:0 0 12px; font-size:22px; letter-spacing:.01em;}
    anywhere, not just on the trading server's own Wi-Fi. Up/down uses the
    same blue/orange pair as the calendar's Travel/Friends categories —
    never red/green — so it reads correctly under deuteranopia. */
-.h2-quote-table{width:100%; border-collapse:collapse; font-size:13.5px;}
-.h2-quote-table th{text-align:left; font-size:10.5px; font-weight:800; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; padding:2px 4px 8px;}
+.h2-quote-table{width:100%; border-collapse:collapse; font-size:12.5px; table-layout:fixed;}
+.h2-quote-table th{text-align:left; font-size:10px; font-weight:800; color:var(--dim); text-transform:uppercase; letter-spacing:.03em; padding:2px 2px 8px;}
 .h2-quote-table th.num, .h2-quote-table td.num{text-align:right;}
-.h2-quote-table td{padding:7px 4px; border-top:1px solid var(--line); font-weight:700;}
+.h2-quote-table td{padding:7px 2px; border-top:1px solid var(--line); font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .h2-quote-table tr:first-child td{border-top:none;}
 .h2-quote-table .sym{font-weight:800;}
 .h2-quote-table .qup{color:var(--cat-travel);}
@@ -590,7 +598,7 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
             <div class="h2-card-body h2-wx-body" id="h2WxDays"></div>
           </div>
           <div class="h2-card" style="flex:1;">
-            <div class="h2-card-head hc-appt"><span>🗓️ Chores — Setup Appointments</span></div>
+            <div class="h2-card-head hc-appt"><span>🗓️ Chores — Appointments</span></div>
             <div class="h2-card-body" id="h2c-appt"></div>
           </div>
           <div class="h2-card" style="flex:1;">
@@ -603,7 +611,10 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
           <div class="h2-card" style="flex:1;">
             <div class="h2-card-head hc-watchlist">
               <span>📈 Markets Watchlist</span>
-              <button class="h2-today" data-goto="ticker">Edit</button>
+              <span class="h2-nav">
+                <button class="h2-navbtn" id="h2WatchlistRefresh" aria-label="Refresh quotes">⟳</button>
+                <button class="h2-today" data-goto="ticker">Edit</button>
+              </span>
             </div>
             <div class="h2-card-body h2-watchlist-body" id="h2WatchlistBody"></div>
           </div>
