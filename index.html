@@ -311,6 +311,46 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
 .gcol-list .list-item .del{width:30px; height:30px; font-size:14px;}
 .gcol-list .list-item .edit{width:30px; height:30px; font-size:12px;}
 
+/* --------------------------------------------------------------- MEDS --- */
+.meds-legend{display:flex; gap:14px; flex-wrap:wrap; padding:0 6px 14px; font-size:11.5px; color:var(--faint); font-weight:600;}
+.meds-legend span{display:inline-flex; align-items:center; gap:6px;}
+.meds-legend .meds-dot{margin-right:0;}
+.meds-card{margin-bottom:18px; padding:0; overflow:hidden;}
+.meds-card-head{padding:11px 16px; color:#fff; font-weight:800; font-size:15px;}
+.meds-card-head.mc-tarun{background:linear-gradient(135deg,#4f8cff,#2f5fce);}
+.meds-card-head.mc-ruchi{background:linear-gradient(135deg,#7c6fea,#5747c9);}
+.meds-card-head.mc-other{background:linear-gradient(135deg,#64748b,#445063);}
+.meds-card-body{padding:4px 10px 10px;}
+.meds-table{width:100%; border-collapse:collapse;}
+.meds-table th{text-align:left; font-size:10.5px; font-weight:800; color:var(--dim); text-transform:uppercase; letter-spacing:.03em; padding:10px 8px 6px;}
+.meds-table th.mc-check, .meds-table td.mc-check{text-align:center; width:44px;}
+.meds-table td.mc-del{width:34px;}
+.meds-row td{padding:4px 6px; border-top:1px solid var(--line); vertical-align:middle;}
+.meds-row:first-child td{border-top:none;}
+.meds-dot{
+  display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px; flex-shrink:0;
+  box-shadow:0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+}
+.meds-dot.mg-am{background:#4f8cff; color:#4f8cff;}
+.meds-dot.mg-pm{background:#f5a524; color:#f5a524;}
+.meds-dot.mg-both{background:#7c6fea; color:#7c6fea;}
+.meds-dot.mg-weekly{background:#0ea5e9; color:#0ea5e9;}
+.meds-dot.mg-biweekly{background:#64748b; color:#64748b;}
+.meds-dot.mg-other{background:var(--faint); color:var(--faint);}
+.mc-name{display:flex; align-items:center;}
+.meds-field{
+  width:100%; border:1px solid transparent; background:transparent; color:var(--tx); font:inherit;
+  font-weight:600; font-size:13.5px; padding:6px 7px; border-radius:8px; min-width:0;
+}
+.meds-field:focus{border-color:var(--line2); background:var(--panel2); outline:none;}
+.mc-name .meds-field{font-weight:700;}
+.meds-del{
+  width:28px; height:28px; border-radius:8px; border:none; background:transparent; color:var(--faint);
+  font-size:13px; cursor:pointer;
+}
+.meds-del:active{transform:scale(.9); color:var(--bad);}
+.meds-addrow{padding:8px 8px 2px;}
+
 /* ---------------------------------------------------------- CALENDAR --- */
 .viewtabs{display:flex; gap:8px; margin-bottom:14px;}
 .viewtabs button{flex:1;}
@@ -535,6 +575,7 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
     <button class="navbtn" data-screen="weather"><span class="ic">⛅</span>Weather</button>
     <button class="navbtn" data-screen="ticker" id="navTicker"><span class="ic">📈</span>Markets</button>
     <button class="navbtn" data-screen="list"><span class="ic">✅</span>Lists</button>
+    <button class="navbtn" data-screen="meds"><span class="ic">💊</span>Meds</button>
     <button class="navbtn" data-screen="recipes"><span class="ic">🍳</span>Recipes</button>
     <button class="navbtn" data-screen="settings"><span class="ic">⚙️</span>Settings</button>
   </nav>
@@ -736,6 +777,12 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
       </div>
       <div class="card" id="listBody"></div>
       <div class="grocery-cols" id="groceryCols" style="display:none;"></div>
+    </section>
+
+    <!-- ============================================================ MEDS -->
+    <section class="screen" id="screen-meds">
+      <h2 class="title">Meds</h2>
+      <div id="medsBody"></div>
     </section>
 
     <!-- ========================================================= RECIPES -->

@@ -27,6 +27,7 @@ const DEFAULTS = {
   rtdbUrl: "",
   wallUrl: "",
   mealieUrl: "",
+  medsSeeded: false,
   weather: { lat:null, lon:null, label:"" },
   keywords: {
     travel:  "trip,flight,airport,vacation,hotel,travel,road trip,fly,departure,layover",
@@ -113,8 +114,8 @@ document.getElementById("dimOverlay").addEventListener("click", (e)=>{
 });
 
 /* -------------------------------------------------- 3. NAV + ROTATION ---- */
-const ALL_SCREENS = ["home2","calendar","weather","ticker","list","recipes","settings"];
-const ROTATABLE = ["home2","calendar","weather","ticker","list","recipes"];
+const ALL_SCREENS = ["home2","calendar","weather","ticker","list","meds","recipes","settings"];
+const ROTATABLE = ["home2","calendar","weather","ticker","list","meds","recipes"];
 let currentScreen = "home2";
 let rotTimer = null, idleResumeTimer = null, rotPaused = false;
 
@@ -132,6 +133,7 @@ function goto(screen){
   if(screen === "weather") renderWeather();
   if(screen === "ticker"){ renderTicker(); renderMarketsWatchlist(); }
   if(screen === "list") renderList();
+  if(screen === "meds") renderMeds();
   if(screen === "recipes"){ renderRecipes(); renderMealie(); }
   if(screen === "home2") renderHome2();
 }
@@ -267,6 +269,8 @@ let recipesStore = makeLocalStore("hub_recipes_local");
 // concentration-cap logic; this is just "which symbols show on the kitchen
 // screen" and has no business touching that). {id, ticker, createdAt}.
 let watchlistStore = makeLocalStore("hub_watchlist_local");
+// {id, person, name, units, timesPerDay, time, pushNotify, order}
+let medsStore = makeLocalStore("hub_meds_local");
 
 // If this device ever operated in local-only mode (Firebase not configured,
 // or misconfigured) while items/recipes were added, those additions are
@@ -305,9 +309,12 @@ function initFirebase(){
     itemsStore = makeLocalStore("hub_items_local");
     recipesStore = makeLocalStore("hub_recipes_local");
     watchlistStore = makeLocalStore("hub_watchlist_local");
+    medsStore = makeLocalStore("hub_meds_local");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
     watchlistStore.subscribe(renderAllWatchlistViews);
+    medsStore.subscribe(renderMeds);
+    seedMedsIfNeeded();
     return;
   }
   try{
@@ -319,15 +326,18 @@ function initFirebase(){
     itemsStore = makeFirestoreStore("items");
     recipesStore = makeFirestoreStore("recipes");
     watchlistStore = makeFirestoreStore("watchlist");
+    medsStore = makeFirestoreStore("meds");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
     watchlistStore.subscribe(renderAllWatchlistViews);
+    medsStore.subscribe(renderMeds);
     dot.className = "statusdot ok";
     txt.textContent = "Connected — syncing live across devices";
     fbReady = true;
     mergeLocalIntoFirestore("hub_items_local", "items", d=>((d.text||"")+"|"+(d.tag||"")).trim().toLowerCase());
     mergeLocalIntoFirestore("hub_recipes_local", "recipes", d=>(d.title||"").trim().toLowerCase());
     mergeLocalIntoFirestore("hub_watchlist_local", "watchlist", d=>(d.ticker||"").trim().toUpperCase());
+    mergeLocalIntoFirestore("hub_meds_local", "meds", d=>((d.person||"")+"|"+(d.name||"")).trim().toLowerCase());
   }catch(e){
     console.warn("Firebase init failed", e);
     dot.className = "statusdot bad";
@@ -335,10 +345,13 @@ function initFirebase(){
     itemsStore = makeLocalStore("hub_items_local");
     recipesStore = makeLocalStore("hub_recipes_local");
     watchlistStore = makeLocalStore("hub_watchlist_local");
+    medsStore = makeLocalStore("hub_meds_local");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
     watchlistStore.subscribe(renderAllWatchlistViews);
+    medsStore.subscribe(renderMeds);
   }
+  setTimeout(seedMedsIfNeeded, 1500);
 }
 function renderAllListViews(){ renderList(); if(currentScreen==="home2") renderHome2(); }
 function renderAllWatchlistViews(){ renderMarketsWatchlist(); if(currentScreen==="home2") renderH2Watchlist(); }
@@ -1109,6 +1122,117 @@ document.getElementById("watchlistInput").addEventListener("keydown", (e)=>{
   if(e.key==="Enter") addWatchlistTicker();
   e.target.value = e.target.value.toUpperCase();
 });
+
+/* ------------------------------------------------------------- 7c. MEDS */
+// Editable per-person medication tables. "Push Notify" is just a data flag
+// here (medsStore's pushNotify field) — actually delivering a phone push at
+// the scheduled time is a separate piece (reusing the trading project's
+// generic engine/push.py + launchd pattern), not yet wired up.
+const MEDS_PEOPLE = ["Tarun", "Ruchi"];
+const MEDS_CARD_CLASS = { Tarun: "mc-tarun", Ruchi: "mc-ruchi" };
+const MEDS_SEED_TARUN = [
+  {name:"Plavix",              units:"75 mg",    timesPerDay:"1",         time:"8:00 AM", pushNotify:true},
+  {name:"Metformin ER",        units:"500 mg",   timesPerDay:"2",         time:"AM & PM", pushNotify:false},
+  {name:"Prandin",             units:"0.5 mg",   timesPerDay:"1",         time:"AM",      pushNotify:false},
+  {name:"Zetia",                units:"10 mg",    timesPerDay:"1",         time:"AM",      pushNotify:false},
+  {name:"Vitamin D",           units:"100 mcg",  timesPerDay:"1",         time:"AM",      pushNotify:false},
+  {name:"Vitamin B12",         units:"1000 mg",  timesPerDay:"1",         time:"AM",      pushNotify:false},
+  {name:"Iron",                units:"65 mg",    timesPerDay:"1",         time:"AM",      pushNotify:false},
+  {name:"Cinsulin",            units:"",         timesPerDay:"1",         time:"AM",      pushNotify:false},
+  {name:"Rosouvastatin",       units:"40 mg",    timesPerDay:"1",         time:"PM",      pushNotify:false},
+  {name:"Omeprazole",          units:"20 mg",    timesPerDay:"1",         time:"12:00 PM",pushNotify:false},
+  {name:"Omega 3 ethyl esters",units:"2 g",      timesPerDay:"1",         time:"PM",      pushNotify:false},
+  {name:"Aspirin",             units:"81 mg",    timesPerDay:"1",         time:"9:00 PM", pushNotify:true},
+  {name:"Mounjaro",            units:"2.5 mg",   timesPerDay:"1/wkly",    time:"Sun",     pushNotify:false},
+  {name:"Repatha",             units:"140 mg",   timesPerDay:"1/bi-wkly", time:"Sun",     pushNotify:false},
+  {name:"Lantus",              units:"26 units", timesPerDay:"1",         time:"PM",      pushNotify:false},
+];
+// Runs once ever (CFG.medsSeeded, a per-device localStorage flag — CFG itself
+// isn't synced). If Firestore is configured we're called again 1.5s after
+// initFirebase() so the real onSnapshot data has had a chance to arrive first
+// — without that delay, a second device's very first render (list still [])
+// would look empty and re-seed a duplicate copy into the shared collection.
+function seedMedsIfNeeded(){
+  if(CFG.medsSeeded) return;
+  CFG.medsSeeded = true;
+  saveCfg();
+  if(medsStore.list.length) return; // already has data (synced) — just mark seeded, don't touch it
+  MEDS_SEED_TARUN.forEach((m, i) => medsStore.add({person:"Tarun", order:i, ...m}));
+}
+function medTimeGroup(time, timesPerDay){
+  const tpd = (timesPerDay || "").toLowerCase();
+  if(tpd.includes("bi-wkly") || tpd.includes("biwkly") || tpd.includes("bi-weekly")) return "biweekly";
+  if(tpd.includes("wkly") || tpd.includes("weekly")) return "weekly";
+  const t = (time || "").toLowerCase();
+  const hasAm = t.includes("am"), hasPm = t.includes("pm");
+  if(hasAm && hasPm) return "both";
+  if(hasAm) return "am";
+  if(hasPm) return "pm";
+  return "other";
+}
+const MEDS_GROUP_LABEL = {am:"Morning", pm:"Evening", both:"Morning & evening", weekly:"Weekly", biweekly:"Every other week", other:"Other"};
+function medsRowHtml(m){
+  const grp = medTimeGroup(m.time, m.timesPerDay);
+  return `<tr class="meds-row" data-id="${m.id}">
+    <td class="mc-check"><div class="check meds-push ${m.pushNotify?'on':''}" data-id="${m.id}" role="checkbox" aria-checked="${!!m.pushNotify}" aria-label="Push notify for ${escapeHtml(m.name||'this medication')}">✓</div></td>
+    <td class="mc-name"><span class="meds-dot mg-${grp}" title="${MEDS_GROUP_LABEL[grp]}"></span><input class="meds-field" data-id="${m.id}" data-field="name" value="${escapeAttr(m.name||"")}" placeholder="Medication"></td>
+    <td><input class="meds-field" data-id="${m.id}" data-field="units" value="${escapeAttr(m.units||"")}" placeholder="—"></td>
+    <td><input class="meds-field" data-id="${m.id}" data-field="timesPerDay" value="${escapeAttr(m.timesPerDay||"")}" placeholder="—"></td>
+    <td><input class="meds-field" data-id="${m.id}" data-field="time" value="${escapeAttr(m.time||"")}" placeholder="—"></td>
+    <td class="mc-del"><button class="meds-del" data-id="${m.id}" aria-label="Remove ${escapeHtml(m.name||'medication')}">✕</button></td>
+  </tr>`;
+}
+function medsPersonCardHtml(person){
+  const cls = MEDS_CARD_CLASS[person] || "mc-other";
+  const rows = medsStore.list.filter(m=>m.person===person).sort((a,b)=>(a.order??0)-(b.order??0));
+  return `<div class="card meds-card">
+    <div class="meds-card-head ${cls}"><span>${escapeHtml(person)} — Med List</span></div>
+    <div class="meds-card-body">
+      <table class="meds-table">
+        <thead><tr><th class="mc-check">Push</th><th>Meds List</th><th>Units</th><th>Times/Day</th><th>Time</th><th></th></tr></thead>
+        <tbody>${rows.length ? rows.map(medsRowHtml).join("") : `<tr><td colspan="6" class="empty">No medications yet.</td></tr>`}</tbody>
+      </table>
+      <div class="meds-addrow"><button class="btn ghost meds-add" data-person="${escapeAttr(person)}">+ Add medication</button></div>
+    </div>
+  </div>`;
+}
+function wireMedsEvents(host){
+  host.querySelectorAll(".meds-push").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const m = medsStore.list.find(x=>x.id===el.dataset.id);
+      if(!m) return;
+      medsStore.update(el.dataset.id, {pushNotify: !m.pushNotify});
+    });
+  });
+  host.querySelectorAll(".meds-field").forEach(el=>{
+    el.addEventListener("change", ()=>{
+      medsStore.update(el.dataset.id, {[el.dataset.field]: el.value});
+    });
+  });
+  host.querySelectorAll(".meds-del").forEach(el=>{
+    el.addEventListener("click", ()=>medsStore.remove(el.dataset.id));
+  });
+  host.querySelectorAll(".meds-add").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const person = el.dataset.person;
+      const existing = medsStore.list.filter(m=>m.person===person);
+      const order = existing.length ? Math.max(...existing.map(m=>m.order??0)) + 1 : 0;
+      medsStore.add({person, order, name:"", units:"", timesPerDay:"1", time:"", pushNotify:false});
+    });
+  });
+}
+function renderMeds(){
+  const host = document.getElementById("medsBody");
+  if(!host) return;
+  host.innerHTML = `<div class="meds-legend">
+      <span><span class="meds-dot mg-am"></span>Morning</span>
+      <span><span class="meds-dot mg-pm"></span>Evening</span>
+      <span><span class="meds-dot mg-both"></span>Morning &amp; evening</span>
+      <span><span class="meds-dot mg-weekly"></span>Weekly</span>
+      <span><span class="meds-dot mg-biweekly"></span>Every other week</span>
+    </div>` + MEDS_PEOPLE.map(medsPersonCardHtml).join("");
+  wireMedsEvents(host);
+}
 
 /* ------------------------------------------------------------ 8. HOME --- */
 // Chores split into two buckets for the Home layout ("Appts scheduling" vs
