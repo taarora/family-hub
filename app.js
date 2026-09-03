@@ -50,10 +50,26 @@ function cloneDefaults(){
 function loadCfg(){
   try{
     const raw = localStorage.getItem("hubConfig");
-    if(!raw) return cloneDefaults();
+    if(!raw) {
+      // Try to load from config file on first run
+      return cloneDefaults();
+    }
     const parsed = JSON.parse(raw);
     return deepMerge(cloneDefaults(), parsed);
   }catch(e){ return cloneDefaults(); }
+}
+
+async function loadCfgFromFile(){
+  try{
+    const response = await fetch('./family-hub-config.json');
+    if(!response.ok) return null;
+    const fileConfig = await response.json();
+    console.log('Loaded config from file:', fileConfig);
+    return deepMerge(cloneDefaults(), fileConfig);
+  }catch(e){
+    console.log('No config file or error loading:', e.message);
+    return null;
+  }
 }
 function deepMerge(base, extra){
   for(const k in extra){
@@ -271,6 +287,10 @@ let recipesStore = makeLocalStore("hub_recipes_local");
 let watchlistStore = makeLocalStore("hub_watchlist_local");
 // {id, person, name, units, timesPerDay, time, pushNotify, order}
 let medsStore = makeLocalStore("hub_meds_local");
+// Home dashboard's cycling photo frame. {id, dataUrl, createdAt} -- dataUrl is a
+// compressed JPEG data: URL, kept under Firestore's 1MiB document limit at upload
+// time (see compressImageFile / the upload handler below).
+let photosStore = makeLocalStore("hub_photos_local");
 
 // If this device ever operated in local-only mode (Firebase not configured,
 // or misconfigured) while items/recipes were added, those additions are
@@ -310,10 +330,12 @@ function initFirebase(){
     recipesStore = makeLocalStore("hub_recipes_local");
     watchlistStore = makeLocalStore("hub_watchlist_local");
     medsStore = makeLocalStore("hub_meds_local");
+    photosStore = makeLocalStore("hub_photos_local");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
     watchlistStore.subscribe(renderAllWatchlistViews);
     medsStore.subscribe(renderMeds);
+    photosStore.subscribe(renderAllPhotoViews);
     seedMedsIfNeeded();
     return;
   }
@@ -327,10 +349,12 @@ function initFirebase(){
     recipesStore = makeFirestoreStore("recipes");
     watchlistStore = makeFirestoreStore("watchlist");
     medsStore = makeFirestoreStore("meds");
+    photosStore = makeFirestoreStore("homePhotos");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
     watchlistStore.subscribe(renderAllWatchlistViews);
     medsStore.subscribe(renderMeds);
+    photosStore.subscribe(renderAllPhotoViews);
     dot.className = "statusdot ok";
     txt.textContent = "Connected — syncing live across devices";
     fbReady = true;
@@ -338,6 +362,7 @@ function initFirebase(){
     mergeLocalIntoFirestore("hub_recipes_local", "recipes", d=>(d.title||"").trim().toLowerCase());
     mergeLocalIntoFirestore("hub_watchlist_local", "watchlist", d=>(d.ticker||"").trim().toUpperCase());
     mergeLocalIntoFirestore("hub_meds_local", "meds", d=>((d.person||"")+"|"+(d.name||"")).trim().toLowerCase());
+    mergeLocalIntoFirestore("hub_photos_local", "homePhotos", d=>(d.dataUrl||"").slice(0,120));
   }catch(e){
     console.warn("Firebase init failed", e);
     dot.className = "statusdot bad";
@@ -346,10 +371,12 @@ function initFirebase(){
     recipesStore = makeLocalStore("hub_recipes_local");
     watchlistStore = makeLocalStore("hub_watchlist_local");
     medsStore = makeLocalStore("hub_meds_local");
+    photosStore = makeLocalStore("hub_photos_local");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
     watchlistStore.subscribe(renderAllWatchlistViews);
     medsStore.subscribe(renderMeds);
+    photosStore.subscribe(renderAllPhotoViews);
   }
   setTimeout(seedMedsIfNeeded, 1500);
 }
@@ -1048,6 +1075,7 @@ async function renderTradingEmbed(host, url, opts){
   const emptyMsg = o.emptyMsg || `No ${service} address set.`;
   const offMsg = o.offMsg || "Isn't reachable.";
   const compact = !!o.compact;
+  const linkOut = !!o.linkOut;
   const big = compact ? "" : `<div class="big">${icon}</div>`;
   if(!url){
     host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">${big}<div>${escapeHtml(emptyMsg)}</div>${compact?'':`<div class="hint">Add your ${escapeHtml(service)}'s network address in Settings.</div>`}</div>`;
@@ -1062,15 +1090,29 @@ async function renderTradingEmbed(host, url, opts){
       ${compact ? '<div class="big" style="font-size:22px;">🔒</div>' : '<div class="big">🔒</div>'}
       <div>Can't embed this here.</div>
       ${compact ? '' : `<div class="hint">This Hub loads securely (https), but your ${escapeHtml(service)} link is plain http (${escapeHtml(url)}) — browsers block mixing the two, even on your home Wi-Fi. Opening it in Safari works fine instead.</div>`}
-      <button class="btn ${compact?'ghost':'primary'} embed-open-ext" style="margin-top:6px;">Open in Safari ↗</button>
+      <a class="btn ${compact?'ghost':'primary'}" style="margin-top:6px; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open in Safari ↗</a>
     </div>`;
-    host.querySelector(".embed-open-ext").addEventListener("click", ()=>{ window.open(url, "_blank"); });
     return;
   }
   if(!compact) host.innerHTML = `<div class="ticker-off"><div class="big">⏳</div><div>Checking connection…</div></div>`;
   const ok = await reachable(url);
   if(!ok){
     host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">${compact?'':'<div class="big">📴</div>'}<div>${escapeHtml(offMsg)}</div>${compact?'':`<div class="hint">Make sure your Mac and ${escapeHtml(service)} are on, and this device is on the same Wi-Fi as ${escapeHtml(url)}.</div>`}</div>`;
+    return;
+  }
+  // Some embeds (Mealie) require a login, and a cross-origin iframe's session
+  // cookie is "third-party" to a browser even when the iframe's src is
+  // same-origin to itself -- Chrome blocks or drops it, so the login form
+  // posts successfully but the session never sticks. Linking out to a real
+  // tab sidesteps that entirely (the app becomes first-party to itself
+  // there), at the cost of leaving the kiosk view.
+  if(linkOut){
+    host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">
+      ${big}
+      <div>${escapeHtml(service)} is ready.</div>
+      ${compact?'':`<div class="hint">Opens in its own tab so your login sticks — embedding it here loses the session every time (third-party cookies get blocked).</div>`}
+      <a class="btn ${compact?'ghost':'primary'}" style="margin-top:6px; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open ${escapeHtml(service)} ↗</a>
+    </div>`;
     return;
   }
   host.innerHTML = `<iframe class="trading-embed-frame" src="${escapeAttr(url)}"></iframe>`;
@@ -1085,7 +1127,7 @@ document.getElementById("tickerRetry").addEventListener("click", renderTicker);
 async function renderMealie(){
   const host = document.getElementById("mealieHost");
   const url = normalizeWallUrl(CFG.mealieUrl);
-  await renderTradingEmbed(host, url, {service:"Mealie", icon:"🍳", emptyMsg:"No Mealie address set.", offMsg:"Mealie isn't reachable."});
+  await renderTradingEmbed(host, url, {service:"Mealie", icon:"🍳", emptyMsg:"No Mealie address set.", offMsg:"Mealie isn't reachable.", linkOut:true});
 }
 document.getElementById("mealieRetry").addEventListener("click", renderMealie);
 
@@ -1320,14 +1362,13 @@ function wireCheckboxes(root){
 let home2MonthCursor = new Date();
 let home2WeekCursor = new Date();
 const H2_MONTH_DOT_CAP = 4;
-// Home 2's Watchlist card fetches quotes from this Cloudflare Worker instead
-// of embedding the trading server's watchlist-widget.html — the iframe
-// embed only ever worked on the trading Mac's own Wi-Fi (mixed-content
-// blocks https->http, same as Open Trades), which isn't acceptable for a
-// kitchen display that should just work. The Worker proxies Yahoo Finance's
-// public chart endpoint (no key, no login) with CORS enabled for this
-// origin, so this is a plain cross-origin fetch, no iframe involved.
-const QUOTES_WORKER_URL = "https://family-hub-quotes.taarora-b77.workers.dev/";
+// Home 2's Watchlist card gets its quotes from the trading server's /quotes/board
+// (Public.com primary, yfinance fallback for anything Public can't quote -- mutual
+// funds mainly, see market_data.quote_board() in the trading repo) since it's on the
+// same LAN and CORS-enabled for this origin. The Cloudflare Worker is a pure fallback
+// for whenever the trading server itself is off.
+const QUOTES_TRADING_SERVER = "http://10.0.0.159:5056";  // RPi Trading server
+const QUOTES_FALLBACK_URL = "https://family-hub-quotes.taarora-b77.workers.dev/";  // External fallback
 
 function renderH2Month(){
   const y = home2MonthCursor.getFullYear(), m = home2MonthCursor.getMonth();
@@ -1416,6 +1457,25 @@ function renderH2Weather(){
 }
 const num2 = (n, d=2) => n == null || Number.isNaN(n) ? "—" : Number(n).toFixed(d);
 const pctStr = n => n == null || Number.isNaN(n) ? "—" : (n>0?"+":"") + Number(n).toFixed(2) + "%";
+async function fetchQuotesFrom(url, ms){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), ms);
+  try{
+    const r = await fetch(url, {cache:"no-store", signal:ctrl.signal});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    return (await r.json()).quotes || {};
+  }finally{
+    clearTimeout(t);
+  }
+}
+async function fetchWatchlistQuotes(tickers){
+  const symbols = encodeURIComponent(tickers.join(","));
+  try{
+    return await fetchQuotesFrom(QUOTES_TRADING_SERVER + "/quotes/board?symbols=" + symbols, 6000);
+  }catch(e){
+    return await fetchQuotesFrom(QUOTES_FALLBACK_URL + "?symbols=" + symbols, 6000);
+  }
+}
 async function renderH2Watchlist(){
   const host = document.getElementById("h2WatchlistBody");
   if(!host) return;
@@ -1426,12 +1486,7 @@ async function renderH2Watchlist(){
   }
   let quotes = {};
   try{
-    const ctrl = new AbortController();
-    const t = setTimeout(()=>ctrl.abort(), 6000);
-    const r = await fetch(QUOTES_WORKER_URL + "?symbols=" + encodeURIComponent(tickers.join(",")), {cache:"no-store", signal:ctrl.signal});
-    clearTimeout(t);
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    quotes = (await r.json()).quotes || {};
+    quotes = await fetchWatchlistQuotes(tickers);
   }catch(e){
     host.innerHTML = `<div class="ticker-off compact"><div class="big" style="font-size:22px;">📴</div><div>Can't reach quotes right now.</div></div>`;
     return;
@@ -1458,6 +1513,100 @@ document.getElementById("h2WatchlistRefresh")?.addEventListener("click", (e)=>{
   btn.disabled = true;
   renderH2Watchlist().finally(()=>{ btn.disabled = false; });
 });
+
+/* ------------------------------------------------------- 7d. HOME PHOTOS */
+let h2PhotoIdx = 0;
+function renderH2Photo(){
+  const host = document.getElementById("h2PhotoBody");
+  if(!host) return;
+  const photos = photosStore.list;
+  if(!photos.length){
+    host.innerHTML = `<div class="h2-photo-empty"><div class="big">🖼️</div><div>No photos yet.</div><div class="hint">Add some in Settings.</div></div>`;
+    return;
+  }
+  if(h2PhotoIdx >= photos.length) h2PhotoIdx = 0;
+  host.innerHTML = photos.map((p,i)=>`<img src="${escapeAttr(p.dataUrl)}" class="${i===h2PhotoIdx?'on':''}" alt="">`).join("");
+}
+// One shared interval, not per-render -- renderH2Photo() gets called often (every
+// list edit, every 15-min calendar refresh, every screen switch), so starting a
+// fresh timer each time would pile up duplicate intervals advancing the same index.
+setInterval(()=>{
+  const photos = photosStore.list;
+  if(photos.length < 2) return;
+  h2PhotoIdx = (h2PhotoIdx + 1) % photos.length;
+  const host = document.getElementById("h2PhotoBody");
+  if(!host) return;
+  host.querySelectorAll("img").forEach((img,i)=>img.classList.toggle("on", i===h2PhotoIdx));
+}, 12000);
+
+function renderPhotoThumbs(){
+  const host = document.getElementById("photoThumbs");
+  if(!host) return;
+  const list = photosStore.list;
+  host.innerHTML = list.length ? list.map(p=>`
+    <div class="photo-thumb" data-id="${p.id}">
+      <img src="${escapeAttr(p.dataUrl)}" alt="">
+      <button class="del" data-id="${p.id}" aria-label="Remove photo">✕</button>
+    </div>
+  `).join("") : `<div class="hint">No photos yet — add one above.</div>`;
+  host.querySelectorAll(".del").forEach(btn=>{
+    btn.addEventListener("click", ()=> photosStore.remove(btn.dataset.id));
+  });
+}
+function renderAllPhotoViews(){ renderPhotoThumbs(); if(currentScreen==="home2") renderH2Photo(); }
+
+// Downscales in a <canvas> and re-encodes as JPEG so an upload from a phone
+// camera (often 3-5MB) fits well under Firestore's 1MiB-per-document limit once
+// base64-encoded (~33% larger than the raw bytes). Backs off quality in 0.1 steps
+// if the first pass still comes out too big -- a busy photo compresses worse than
+// a plain one, so a single fixed quality isn't reliable across arbitrary photos.
+function compressImageFile(file, maxSide, quality){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const ratio = Math.min(maxSide/img.width, maxSide/img.height, 1);
+        const w = Math.max(1, Math.round(img.width*ratio)), h = Math.max(1, Math.round(img.height*ratio));
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = ()=>reject(new Error("Not a readable image"));
+      img.src = e.target.result;
+    };
+    reader.onerror = ()=>reject(new Error("Couldn't read file"));
+    reader.readAsDataURL(file);
+  });
+}
+async function handlePhotoUpload(){
+  const inp = document.getElementById("photoUploadInput");
+  const hint = document.getElementById("photoUploadHint");
+  const file = inp.files && inp.files[0];
+  if(!file){ hint.textContent = "Choose a photo first."; return; }
+  hint.textContent = "Compressing…";
+  const MAX_BYTES = 900000; // headroom under Firestore's 1MiB document cap
+  try{
+    let quality = 0.75;
+    let dataUrl = await compressImageFile(file, 1600, quality);
+    while(dataUrl.length > MAX_BYTES && quality > 0.3){
+      quality -= 0.1;
+      dataUrl = await compressImageFile(file, 1600, quality);
+    }
+    if(dataUrl.length > MAX_BYTES){
+      hint.textContent = "That photo is too large even compressed — try a smaller one.";
+      return;
+    }
+    photosStore.add({dataUrl});
+    inp.value = "";
+    hint.textContent = "Added.";
+    setTimeout(()=>{ if(hint.textContent === "Added.") hint.textContent = ""; }, 2500);
+  }catch(e){
+    hint.textContent = "Couldn't read that file.";
+  }
+}
+document.getElementById("photoUploadBtn")?.addEventListener("click", handlePhotoUpload);
 function renderHome2(){
   renderH2Month();
   renderH2Week();
@@ -1465,6 +1614,7 @@ function renderHome2(){
   renderH2Chores();
   renderH2Weather();
   renderH2Watchlist();
+  renderH2Photo();
 }
 document.getElementById("h2MonthPrev")?.addEventListener("click", ()=>{ home2MonthCursor = new Date(home2MonthCursor.getFullYear(), home2MonthCursor.getMonth()-1, 1); renderH2Month(); });
 document.getElementById("h2MonthNext")?.addEventListener("click", ()=>{ home2MonthCursor = new Date(home2MonthCursor.getFullYear(), home2MonthCursor.getMonth()+1, 1); renderH2Month(); });
@@ -1768,7 +1918,13 @@ function escapeHtml(s){ return String(s??"").replace(/[&<>"']/g, c => ({"&":"&am
 function escapeAttr(s){ return escapeHtml(s); }
 
 /* -------------------------------------------------------------- 10. BOOT */
-function boot(){
+async function boot(){
+  // Try to load config from file on first run (before localStorage has been saved)
+  const fileConfig = await loadCfgFromFile();
+  if(fileConfig){
+    CFG = fileConfig;
+    // Don't auto-save to localStorage yet - let user confirm in settings first
+  }
   loadSettingsUI();
   applyTheme();
   tickClock(); setInterval(tickClock, 1000);

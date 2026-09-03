@@ -15,3 +15,7 @@ family-hub-backup-*.json
 # browser's downloads location is pointed at this folder. Contains the same
 # sensitive values as SETTINGS-CHEATSHEET.md, so it's git-ignored the same way.
 config/*.json
+
+# Same reason, but for a browser whose downloads location is the repo root
+# itself rather than config/ -- same sensitive Firebase config either way.
+/family-hub-config.json
