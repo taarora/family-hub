@@ -393,52 +393,63 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
 .gcol-list .list-item .edit{width:30px; height:30px; font-size:12px;}
 
 /* --------------------------------------------------------------- MEDS --- */
-.meds-legend{display:flex; gap:14px; flex-wrap:wrap; padding:0 6px 14px; font-size:11.5px; color:var(--faint); font-weight:600;}
-.meds-legend span{display:inline-flex; align-items:center; gap:6px;}
-.meds-legend .meds-dot{margin-right:0;}
-.meds-card{margin-bottom:18px; padding:0; overflow:hidden;}
-.meds-card-head{padding:11px 16px; color:#fff; font-weight:800; font-size:15px;}
-.meds-card-head.mc-tarun{background:linear-gradient(135deg,#4f8cff,#2f5fce);}
-.meds-card-head.mc-ruchi{background:linear-gradient(135deg,#7c6fea,#5747c9);}
-.meds-card-head.mc-other{background:linear-gradient(135deg,#64748b,#445063);}
-.meds-card-body{padding:4px 10px 10px;}
-.meds-table{width:100%; border-collapse:collapse;}
-.meds-table th{text-align:left; font-size:10.5px; font-weight:800; color:var(--dim); text-transform:uppercase; letter-spacing:.03em; padding:10px 8px 6px;}
-.meds-table th.mc-check, .meds-table td.mc-check{text-align:center; width:44px;}
-.meds-table td.mc-del{width:34px;}
-.meds-row td{padding:4px 6px; border-top:1px solid var(--line); vertical-align:middle;}
-.meds-row:first-child td{border-top:none;}
-.meds-dot{
-  display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px; flex-shrink:0;
-  box-shadow:0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+/* Deliberately larger type and touch targets than the rest of the app —
+   this screen was asked for explicitly as "large buttons, easy-to-read
+   text", unlike the compact-by-default kitchen-kiosk styling elsewhere. */
+.meds-person-switch button{padding:14px; font-size:16px;}
+
+.meds-summary{
+  display:flex; align-items:center; gap:12px; padding:16px 18px; border-radius:var(--radius);
+  font-weight:800; font-size:16px; margin-bottom:18px; border:1px solid var(--line);
 }
-.meds-dot.mg-am{background:#4f8cff; color:#4f8cff;}
-.meds-dot.mg-pm{background:#f5a524; color:#f5a524;}
-.meds-dot.mg-both{background:#7c6fea; color:#7c6fea;}
-.meds-dot.mg-weekly{background:#0ea5e9; color:#0ea5e9;}
-.meds-dot.mg-biweekly{background:#64748b; color:#64748b;}
-.meds-dot.mg-other{background:var(--faint); color:var(--faint);}
-.mc-name{display:flex; align-items:center;}
-.meds-field{
-  width:100%; border:1px solid transparent; background:transparent; color:var(--tx); font:inherit;
-  font-weight:600; font-size:13.5px; padding:6px 7px; border-radius:8px; min-width:0;
+.meds-summary .n{font-size:20px;}
+.meds-summary.due{background:color-mix(in srgb, var(--warn) 16%, var(--panel)); border-color:color-mix(in srgb, var(--warn) 40%, var(--line)); color:var(--tx);}
+.meds-summary.clear{background:color-mix(in srgb, var(--good) 14%, var(--panel)); border-color:color-mix(in srgb, var(--good) 35%, var(--line)); color:var(--tx);}
+
+.meds-section-title{font-size:13.5px; font-weight:800; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; margin:22px 0 10px;}
+.meds-section-title:first-child{margin-top:0;}
+.meds-cards{display:flex; flex-direction:column; gap:12px;}
+
+.med-card{
+  display:flex; align-items:flex-start; gap:14px; background:var(--panel); border:1px solid var(--line);
+  border-radius:var(--radius); padding:16px 18px; cursor:pointer; box-shadow:var(--shadow);
 }
-.meds-field:focus{border-color:var(--line2); background:var(--panel2); outline:none;}
-.mc-name .meds-field{font-weight:700;}
-.meds-del{
-  width:28px; height:28px; border-radius:8px; border:none; background:transparent; color:var(--faint);
-  font-size:13px; cursor:pointer;
+.med-card.med-due{border-color:color-mix(in srgb, var(--warn) 55%, var(--line)); background:color-mix(in srgb, var(--warn) 7%, var(--panel));}
+.med-card.med-taken{opacity:.62;}
+.med-check{
+  width:48px; height:48px; border-radius:50%; border:2.5px solid var(--line2); background:var(--panel2);
+  color:transparent; font-size:22px; font-weight:900; flex-shrink:0; cursor:pointer; display:flex;
+  align-items:center; justify-content:center;
 }
-.meds-del:active{transform:scale(.9); color:var(--bad);}
-.meds-addrow{padding:8px 8px 2px;}
-@media (max-width:620px){
-  /* iPhone: editing happens on iPad/desktop where there's more room, so hide
-     the push-notify checkbox and delete columns here — view-only on iPhone. */
-  .meds-table th.mc-check, .meds-table td.mc-check,
-  .meds-table th.mc-del, .meds-table td.mc-del{display:none;}
-  .meds-table th{padding:8px 4px 5px; font-size:9.5px;}
-  .meds-row td{padding:4px 3px;}
-  .meds-field{padding:6px 4px; font-size:12.5px;}
+.med-check.on{background:var(--good); border-color:var(--good); color:#06210f;}
+.med-check-spacer{width:48px; flex-shrink:0;}
+.med-info{flex:1; min-width:0;}
+.med-name{font-size:19px; font-weight:800; line-height:1.25;}
+.med-meta{font-size:15px; font-weight:600; color:var(--dim); margin-top:3px;}
+.med-notes{font-size:13.5px; color:var(--faint); margin-top:6px; font-style:italic;}
+.med-badges{display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0;}
+.med-refill{font-size:12.5px; font-weight:800; padding:5px 10px; border-radius:999px; white-space:nowrap;}
+.med-refill.ok{background:var(--panel2); color:var(--faint);}
+.med-refill.upcoming{background:color-mix(in srgb, var(--accent) 18%, var(--panel2)); color:var(--accent);}
+.med-refill.soon{background:color-mix(in srgb, var(--warn) 20%, var(--panel2)); color:var(--warn);}
+.med-refill.overdue{background:color-mix(in srgb, var(--bad) 20%, var(--panel2)); color:var(--bad);}
+.med-push-badge{font-size:15px;}
+
+.meds-add-btn{width:100%; margin-top:20px; font-size:17px; min-height:60px;}
+
+/* --------------------------------------------------------- print-only --- */
+.print-only{display:none;}
+@media print{
+  body > *:not(#medsPrintArea){display:none !important;}
+  #medsPrintArea{
+    display:block !important; position:static; padding:24px; background:#fff; color:#000;
+    font-family:-apple-system, "SF Pro Text", system-ui, sans-serif;
+  }
+  #medsPrintArea h2{margin:0 0 4px; font-size:22px;}
+  #medsPrintArea .print-date{color:#555; margin-bottom:18px; font-size:13px;}
+  #medsPrintArea table{width:100%; border-collapse:collapse;}
+  #medsPrintArea th, #medsPrintArea td{border:1px solid #999; padding:8px 10px; text-align:left; font-size:12.5px; vertical-align:top;}
+  #medsPrintArea th{background:#f0f0f0; text-transform:uppercase; letter-spacing:.03em; font-size:11px;}
 }
 
 /* ---------------------------------------------------------- CALENDAR --- */
@@ -875,7 +886,11 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
 
     <!-- ============================================================ MEDS -->
     <section class="screen" id="screen-meds">
-      <h2 class="title">Meds</h2>
+      <div class="row between wrap" style="margin-bottom:14px;">
+        <h2 class="title" style="margin:0;">Meds</h2>
+        <button class="btn ghost" id="medsPrint">🖨️ Print</button>
+      </div>
+      <div class="segbtn meds-person-switch" id="medsPersonSwitch" style="margin-bottom:18px;"></div>
       <div id="medsBody"></div>
     </section>
 
@@ -1051,6 +1066,37 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
     </div>
   </div>
 
+  <div class="modal-back" id="medModalBack" hidden>
+    <div class="modal">
+      <h3 id="medModalTitle">New Medication</h3>
+      <div class="field"><label>Medication name</label><input type="text" id="medName" placeholder="e.g. Plavix"></div>
+      <div class="field"><label>Dosage</label><input type="text" id="medDosage" placeholder="e.g. 75 mg"></div>
+      <div class="field"><label>Time of day</label><input type="text" id="medTime" placeholder="e.g. 8:00 AM"></div>
+      <div class="field">
+        <label>Frequency</label>
+        <div class="segbtn" id="medFreqSwitch">
+          <button type="button" data-freq="daily" class="active">Every day</button>
+          <button type="button" data-freq="days">Specific days</button>
+        </div>
+      </div>
+      <div class="field" id="medDaysField" style="display:none;">
+        <label>Which days</label>
+        <div class="chiplist" id="medDaysChips"></div>
+      </div>
+      <div class="field"><label>Refill date</label><input type="date" id="medRefill"></div>
+      <div class="field"><label>Notes (optional)</label><textarea id="medNotes" placeholder="e.g. take with food"></textarea></div>
+      <div class="field row" style="align-items:center; gap:12px; margin-bottom:6px;">
+        <button type="button" class="switch" id="medPushSwitch"></button>
+        <label style="margin:0; font-weight:700;">Push notify reminder</label>
+      </div>
+      <div class="actions">
+        <button class="btn danger" id="medDelete" style="display:none;">Delete</button>
+        <button class="btn ghost" id="medCancel">Cancel</button>
+        <button class="btn primary" id="medSave">Save Medication</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-back" id="importModalBack" hidden>
     <div class="modal">
       <h3>Import Config</h3>
@@ -1068,6 +1114,11 @@ button.list-tag{font:inherit; background:var(--panel2); cursor:pointer;}
   </div>
 
 </div>
+
+<!-- Print-only medication summary. A direct sibling of #app (not nested
+     inside it) so the print stylesheet's `body > *:not(#medsPrintArea)`
+     selector can hide literally everything else in one rule. -->
+<div id="medsPrintArea" class="print-only"></div>
 
 <!-- Firebase (only touched if Settings has a config saved) -->
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>

@@ -1166,12 +1166,13 @@ document.getElementById("watchlistInput").addEventListener("keydown", (e)=>{
 });
 
 /* ------------------------------------------------------------- 7c. MEDS */
-// Editable per-person medication tables. "Push Notify" is just a data flag
+// Medication tracker, one list per person. "Push Notify" is just a data flag
 // here (medsStore's pushNotify field) — actually delivering a phone push at
 // the scheduled time is a separate piece (reusing the trading project's
-// generic engine/push.py + launchd pattern), not yet wired up.
+// generic engine/push.py + launchd pattern), not yet wired up. "Due today" /
+// "taken today" is purely an in-app visual reminder for the same reason.
 const MEDS_PEOPLE = ["Tarun", "Ruchi"];
-const MEDS_CARD_CLASS = { Tarun: "mc-tarun", Ruchi: "mc-ruchi" };
+const MEDS_WEEKDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MEDS_SEED_TARUN = [
   {name:"Plavix",              units:"75 mg",    timesPerDay:"1",         time:"8:00 AM", pushNotify:true},
   {name:"Metformin ER",        units:"500 mg",   timesPerDay:"2",         time:"AM & PM", pushNotify:false},
@@ -1201,80 +1202,230 @@ function seedMedsIfNeeded(){
   if(medsStore.list.length) return; // already has data (synced) — just mark seeded, don't touch it
   MEDS_SEED_TARUN.forEach((m, i) => medsStore.add({person:"Tarun", order:i, ...m}));
 }
-function medTimeGroup(time, timesPerDay){
-  const tpd = (timesPerDay || "").toLowerCase();
-  if(tpd.includes("bi-wkly") || tpd.includes("biwkly") || tpd.includes("bi-weekly")) return "biweekly";
-  if(tpd.includes("wkly") || tpd.includes("weekly")) return "weekly";
-  const t = (time || "").toLowerCase();
-  const hasAm = t.includes("am"), hasPm = t.includes("pm");
-  if(hasAm && hasPm) return "both";
-  if(hasAm) return "am";
-  if(hasPm) return "pm";
-  return "other";
+// Reads a med record in whichever shape it's actually stored in, without
+// mutating the store. Records created by the old inline-editable-table UI
+// only ever have {units, timesPerDay, time} — `frequency` never being set is
+// exactly what marks a record as pre-dating this rebuild; a record the new
+// form saved always sets it explicitly (even to "daily"), so this check
+// never misfires on a genuinely new record.
+function normalizeMed(m){
+  if(m.frequency !== undefined){
+    return {
+      id: m.id, person: m.person, order: m.order ?? 0,
+      name: m.name || "", dosage: m.dosage ?? m.units ?? "", time: m.time || "",
+      frequency: m.frequency || "daily", days: m.days || [],
+      refillDate: m.refillDate || "", notes: m.notes || "",
+      pushNotify: !!m.pushNotify, lastTakenAt: m.lastTakenAt || null,
+    };
+  }
+  const tpd = (m.timesPerDay || "").toLowerCase();
+  const isBiweekly = tpd.includes("bi-wkly") || tpd.includes("biwkly") || tpd.includes("bi-weekly");
+  const isWeekly = !isBiweekly && (tpd.includes("wkly") || tpd.includes("weekly"));
+  let frequency = "daily", days = [], time = m.time || "";
+  if(isWeekly || isBiweekly){
+    frequency = "days";
+    // The old table's "time" column held a day abbreviation ("Sun") for
+    // these rows instead of a real time — that's the only place it lived.
+    const dayGuess = MEDS_WEEKDAYS.find(d => (m.time||"").toLowerCase().startsWith(d.toLowerCase()));
+    days = dayGuess ? [dayGuess] : [];
+    time = "";
+  }
+  return {
+    id: m.id, person: m.person, order: m.order ?? 0,
+    name: m.name || "", dosage: m.units || "", time,
+    frequency, days, refillDate: "", notes: isBiweekly ? "Every other week" : "",
+    pushNotify: !!m.pushNotify, lastTakenAt: null,
+  };
 }
-const MEDS_GROUP_LABEL = {am:"Morning", pm:"Evening", both:"Morning & evening", weekly:"Weekly", biweekly:"Every other week", other:"Other"};
-function medsRowHtml(m){
-  const grp = medTimeGroup(m.time, m.timesPerDay);
-  return `<tr class="meds-row" data-id="${m.id}">
-    <td class="mc-check"><div class="check meds-push ${m.pushNotify?'on':''}" data-id="${m.id}" role="checkbox" aria-checked="${!!m.pushNotify}" aria-label="Push notify for ${escapeHtml(m.name||'this medication')}">✓</div></td>
-    <td class="mc-name"><span class="meds-dot mg-${grp}" title="${MEDS_GROUP_LABEL[grp]}"></span><input class="meds-field" data-id="${m.id}" data-field="name" value="${escapeAttr(m.name||"")}" placeholder="Medication"></td>
-    <td><input class="meds-field" data-id="${m.id}" data-field="units" value="${escapeAttr(m.units||"")}" placeholder="—"></td>
-    <td><input class="meds-field" data-id="${m.id}" data-field="timesPerDay" value="${escapeAttr(m.timesPerDay||"")}" placeholder="—"></td>
-    <td><input class="meds-field" data-id="${m.id}" data-field="time" value="${escapeAttr(m.time||"")}" placeholder="—"></td>
-    <td class="mc-del"><button class="meds-del" data-id="${m.id}" aria-label="Remove ${escapeHtml(m.name||'medication')}">✕</button></td>
-  </tr>`;
+function medsTodayStr(){
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
-function medsPersonCardHtml(person){
-  const cls = MEDS_CARD_CLASS[person] || "mc-other";
-  const rows = medsStore.list.filter(m=>m.person===person).sort((a,b)=>(a.order??0)-(b.order??0));
-  return `<div class="card meds-card">
-    <div class="meds-card-head ${cls}"><span>${escapeHtml(person)} — Med List</span></div>
-    <div class="meds-card-body">
-      <table class="meds-table">
-        <thead><tr><th class="mc-check">Push</th><th>Meds List</th><th>Units</th><th title="Times per Day">TOD</th><th>Time</th><th class="mc-del"></th></tr></thead>
-        <tbody>${rows.length ? rows.map(medsRowHtml).join("") : `<tr><td colspan="6" class="empty">No medications yet.</td></tr>`}</tbody>
-      </table>
-      <div class="meds-addrow"><button class="btn ghost meds-add" data-person="${escapeAttr(person)}">+ Add medication</button></div>
+function medIsDueToday(nm){
+  if(nm.frequency === "days") return nm.days.includes(MEDS_WEEKDAYS[new Date().getDay()]);
+  return true; // daily
+}
+function medIsTakenToday(nm){
+  return nm.lastTakenAt === medsTodayStr();
+}
+function medFreqLabel(nm){
+  if(nm.frequency === "daily") return "Daily";
+  if(!nm.days.length) return "No days set";
+  if(nm.days.length === 7) return "Daily";
+  return nm.days.join(", ");
+}
+// Color-coded countdown: overdue (red) / due within 3 days (warn) / within a
+// week (accent) / anything further out just reads as a plain neutral badge.
+function medRefillInfo(refillDate){
+  if(!refillDate) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const rd = new Date(refillDate + "T00:00:00");
+  const days = Math.round((rd - today) / 86400000);
+  const cls = days < 0 ? "overdue" : days <= 3 ? "soon" : days <= 7 ? "upcoming" : "ok";
+  const label = days < 0 ? `Refill overdue ${-days}d` : days === 0 ? "Refill due today" : `Refill in ${days}d`;
+  return {days, cls, label};
+}
+
+let medsActivePerson = MEDS_PEOPLE[0];
+function renderMedsPersonSwitch(){
+  const host = document.getElementById("medsPersonSwitch");
+  if(!host) return;
+  host.innerHTML = MEDS_PEOPLE.map(p=>
+    `<button data-person="${escapeAttr(p)}" class="${p===medsActivePerson?'active':''}">${escapeHtml(p)}</button>`
+  ).join("");
+  host.querySelectorAll("button").forEach(b=>{
+    b.addEventListener("click", ()=>{ medsActivePerson = b.dataset.person; renderMeds(); });
+  });
+}
+function medCardHtml(nm){
+  const dueToday = medIsDueToday(nm);
+  const taken = medIsTakenToday(nm);
+  const refill = medRefillInfo(nm.refillDate);
+  const metaBits = [nm.dosage, nm.time, medFreqLabel(nm)].filter(Boolean);
+  return `<div class="med-card ${dueToday && !taken ? 'med-due' : ''} ${taken ? 'med-taken' : ''}" data-id="${nm.id}">
+    ${dueToday
+      ? `<button class="med-check ${taken?'on':''}" data-id="${nm.id}" aria-label="Mark ${escapeHtml(nm.name||'medication')} ${taken?'not taken':'taken'} today">✓</button>`
+      : `<div class="med-check-spacer"></div>`}
+    <div class="med-info">
+      <div class="med-name">${escapeHtml(nm.name || "(unnamed)")}</div>
+      <div class="med-meta">${escapeHtml(metaBits.join(" · "))}</div>
+      ${nm.notes ? `<div class="med-notes">${escapeHtml(nm.notes)}</div>` : ""}
+    </div>
+    <div class="med-badges">
+      ${refill ? `<span class="med-refill ${refill.cls}">${escapeHtml(refill.label)}</span>` : ""}
+      ${nm.pushNotify ? `<span class="med-push-badge" title="Push reminder on">🔔</span>` : ""}
     </div>
   </div>`;
 }
 function wireMedsEvents(host){
-  host.querySelectorAll(".meds-push").forEach(el=>{
-    el.addEventListener("click", ()=>{
+  host.querySelectorAll(".med-check").forEach(el=>{
+    el.addEventListener("click", (e)=>{
+      e.stopPropagation();
       const m = medsStore.list.find(x=>x.id===el.dataset.id);
       if(!m) return;
-      medsStore.update(el.dataset.id, {pushNotify: !m.pushNotify});
+      const taken = medIsTakenToday(normalizeMed(m));
+      medsStore.update(el.dataset.id, {lastTakenAt: taken ? null : medsTodayStr()});
     });
   });
-  host.querySelectorAll(".meds-field").forEach(el=>{
-    el.addEventListener("change", ()=>{
-      medsStore.update(el.dataset.id, {[el.dataset.field]: el.value});
-    });
+  host.querySelectorAll(".med-card").forEach(el=>{
+    el.addEventListener("click", ()=> openMedModal(el.dataset.id));
   });
-  host.querySelectorAll(".meds-del").forEach(el=>{
-    el.addEventListener("click", ()=>medsStore.remove(el.dataset.id));
-  });
-  host.querySelectorAll(".meds-add").forEach(el=>{
-    el.addEventListener("click", ()=>{
-      const person = el.dataset.person;
-      const existing = medsStore.list.filter(m=>m.person===person);
-      const order = existing.length ? Math.max(...existing.map(m=>m.order??0)) + 1 : 0;
-      medsStore.add({person, order, name:"", units:"", timesPerDay:"1", time:"", pushNotify:false});
-    });
-  });
+  document.getElementById("medsAddBtn")?.addEventListener("click", ()=> openMedModal(null));
 }
 function renderMeds(){
+  renderMedsPersonSwitch();
   const host = document.getElementById("medsBody");
   if(!host) return;
-  host.innerHTML = `<div class="meds-legend">
-      <span><span class="meds-dot mg-am"></span>Morning</span>
-      <span><span class="meds-dot mg-pm"></span>Evening</span>
-      <span><span class="meds-dot mg-both"></span>Morning &amp; evening</span>
-      <span><span class="meds-dot mg-weekly"></span>Weekly</span>
-      <span><span class="meds-dot mg-biweekly"></span>Every other week</span>
-    </div>` + MEDS_PEOPLE.map(medsPersonCardHtml).join("");
+  const all = medsStore.list.filter(m=>m.person===medsActivePerson).map(normalizeMed).sort((a,b)=>(a.order??0)-(b.order??0));
+  const due = all.filter(m=>medIsDueToday(m) && !medIsTakenToday(m));
+
+  host.innerHTML = `
+    ${due.length
+      ? `<div class="meds-summary due">⏰ <span class="n">${due.length}</span> medication${due.length===1?'':'s'} due today</div>`
+      : `<div class="meds-summary clear">✅ All caught up for today</div>`}
+    <div class="meds-section-title">All Medications</div>
+    <div class="meds-cards">${all.length ? all.map(medCardHtml).join("") : `<div class="empty">No medications yet for ${escapeHtml(medsActivePerson)}. Tap "+ Add Medication" to start.</div>`}</div>
+    <button class="btn primary meds-add-btn" id="medsAddBtn">+ Add Medication</button>
+  `;
   wireMedsEvents(host);
+  renderMedsPrintArea(all);
 }
+
+/* ------------------------------------------------------- 7d. MEDS MODAL */
+let editingMedId = null;
+let medFormDays = new Set();
+function renderMedDaysChips(){
+  const host = document.getElementById("medDaysChips");
+  host.innerHTML = MEDS_WEEKDAYS.map(d=>`<button type="button" class="chip-toggle ${medFormDays.has(d)?'on':''}" data-day="${d}">${d}</button>`).join("");
+  host.querySelectorAll("button").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      const d = b.dataset.day;
+      medFormDays.has(d) ? medFormDays.delete(d) : medFormDays.add(d);
+      b.classList.toggle("on");
+    });
+  });
+}
+function openMedModal(id){
+  editingMedId = id;
+  const raw = id ? medsStore.list.find(x=>x.id===id) : null;
+  const m = raw ? normalizeMed(raw) : null;
+  document.getElementById("medModalTitle").textContent = id ? "Edit Medication" : "New Medication";
+  document.getElementById("medName").value = m?.name || "";
+  document.getElementById("medDosage").value = m?.dosage || "";
+  document.getElementById("medTime").value = m?.time || "";
+  document.getElementById("medRefill").value = m?.refillDate || "";
+  document.getElementById("medNotes").value = m?.notes || "";
+  document.getElementById("medPushSwitch").classList.toggle("on", !!m?.pushNotify);
+  const freq = m?.frequency || "daily";
+  document.querySelectorAll("#medFreqSwitch button").forEach(b=>b.classList.toggle("active", b.dataset.freq===freq));
+  document.getElementById("medDaysField").style.display = freq === "days" ? "" : "none";
+  medFormDays = new Set(m?.days || []);
+  renderMedDaysChips();
+  document.getElementById("medDelete").style.display = id ? "" : "none";
+  document.getElementById("medModalBack").hidden = false;
+}
+document.querySelectorAll("#medFreqSwitch button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#medFreqSwitch button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById("medDaysField").style.display = b.dataset.freq === "days" ? "" : "none";
+  });
+});
+document.getElementById("medPushSwitch")?.addEventListener("click", (e)=>{ e.currentTarget.classList.toggle("on"); });
+document.getElementById("medCancel")?.addEventListener("click", ()=>{ document.getElementById("medModalBack").hidden = true; });
+document.getElementById("medSave")?.addEventListener("click", ()=>{
+  const name = document.getElementById("medName").value.trim();
+  if(!name){ toast("Enter a medication name"); return; }
+  const freq = document.querySelector("#medFreqSwitch button.active")?.dataset.freq || "daily";
+  const obj = {
+    person: medsActivePerson,
+    name,
+    dosage: document.getElementById("medDosage").value.trim(),
+    time: document.getElementById("medTime").value.trim(),
+    frequency: freq,
+    days: freq === "days" ? [...medFormDays] : [],
+    refillDate: document.getElementById("medRefill").value,
+    notes: document.getElementById("medNotes").value.trim(),
+    pushNotify: document.getElementById("medPushSwitch").classList.contains("on"),
+  };
+  if(editingMedId){
+    medsStore.update(editingMedId, obj);
+  }else{
+    const existing = medsStore.list.filter(m=>m.person===medsActivePerson);
+    const order = existing.length ? Math.max(...existing.map(m=>m.order??0)) + 1 : 0;
+    medsStore.add({...obj, order});
+  }
+  document.getElementById("medModalBack").hidden = true;
+  toast("Medication saved");
+});
+document.getElementById("medDelete")?.addEventListener("click", ()=>{
+  if(editingMedId) medsStore.remove(editingMedId);
+  document.getElementById("medModalBack").hidden = true;
+  toast("Medication removed");
+});
+
+/* ------------------------------------------------------- 7e. MEDS PRINT */
+function renderMedsPrintArea(all){
+  const host = document.getElementById("medsPrintArea");
+  if(!host) return;
+  const today = new Date().toLocaleDateString([], {weekday:"long", year:"numeric", month:"long", day:"numeric"});
+  host.innerHTML = `
+    <h2>${escapeHtml(medsActivePerson)} — Medication List</h2>
+    <div class="print-date">Printed ${escapeHtml(today)}</div>
+    <table>
+      <thead><tr><th>Medication</th><th>Dosage</th><th>Time</th><th>Frequency</th><th>Refill Date</th><th>Notes</th></tr></thead>
+      <tbody>${all.map(m=>`<tr>
+        <td>${escapeHtml(m.name)}</td>
+        <td>${escapeHtml(m.dosage)}</td>
+        <td>${escapeHtml(m.time)}</td>
+        <td>${escapeHtml(medFreqLabel(m))}</td>
+        <td>${m.refillDate ? escapeHtml(new Date(m.refillDate+"T00:00:00").toLocaleDateString()) : "—"}</td>
+        <td>${escapeHtml(m.notes)}</td>
+      </tr>`).join("")}</tbody>
+    </table>
+  `;
+}
+document.getElementById("medsPrint")?.addEventListener("click", ()=> window.print());
 
 /* ------------------------------------------------------------ 8. HOME --- */
 // Chores split into two buckets for the Home layout ("Appts scheduling" vs
