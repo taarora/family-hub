@@ -248,6 +248,13 @@ function makeLocalStore(key){
     add(obj){ list = [...list, {id:uid(), ...obj}]; persist(); },
     update(id, patch){ list = list.map(x => x.id===id ? {...x, ...patch} : x); persist(); },
     remove(id){ list = list.filter(x => x.id!==id); persist(); },
+    // Idempotent upsert for a caller-chosen id, e.g. one-time seed data — two
+    // devices racing to seed the same fixed id converge on one row instead
+    // of each blindly inserting their own (see makeFirestoreStore's setId).
+    setId(id, obj){
+      list = list.some(x=>x.id===id) ? list.map(x=>x.id===id?{...x,...obj,id}:x) : [...list, {id, ...obj}];
+      persist();
+    },
     subscribe(fn){ subs.push(fn); fn(list); }
   };
 }
@@ -274,6 +281,13 @@ function makeFirestoreStore(collectionName){
     add(obj){ col.add({...obj, createdAt: Date.now()}); },
     update(id, patch){ col.doc(id).update(patch); },
     remove(id){ col.doc(id).delete(); },
+    // Idempotent upsert for a caller-chosen id. col.add() always mints a
+    // fresh random id, so two devices independently deciding "the list looks
+    // empty, let's seed" each insert their own full copy — this is exactly
+    // what happened to the Meds seed data (every row duplicated once, 2026-
+    // 09-03). set() on a fixed id instead converges to one document no
+    // matter how many times or how many devices call it.
+    setId(id, obj){ col.doc(id).set({...obj, createdAt: Date.now()}, {merge: true}); },
     subscribe(fn){ subs.push(fn); fn(list); }
   };
 }
@@ -1191,16 +1205,22 @@ const MEDS_SEED_TARUN = [
   {name:"Lantus",              units:"26 units", timesPerDay:"1",         time:"PM",      pushNotify:false},
 ];
 // Runs once ever (CFG.medsSeeded, a per-device localStorage flag — CFG itself
-// isn't synced). If Firestore is configured we're called again 1.5s after
-// initFirebase() so the real onSnapshot data has had a chance to arrive first
-// — without that delay, a second device's very first render (list still [])
-// would look empty and re-seed a duplicate copy into the shared collection.
+// isn't synced). Uses setId() with a deterministic per-medication id rather
+// than add(), which used to mint a fresh random id every call: if Firestore
+// hasn't synced yet on a second device, both it and the first device decide
+// "list looks empty, let's seed" and each called add() for all 15 rows,
+// producing 30 documents (every medication duplicated once, found and
+// cleaned up 2026-09-03). setId() on a fixed id converges to one document
+// no matter how many devices race to seed it or how many times this runs.
+function medSeedId(person, name){
+  return (person+"-"+name).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
+}
 function seedMedsIfNeeded(){
   if(CFG.medsSeeded) return;
   CFG.medsSeeded = true;
   saveCfg();
   if(medsStore.list.length) return; // already has data (synced) — just mark seeded, don't touch it
-  MEDS_SEED_TARUN.forEach((m, i) => medsStore.add({person:"Tarun", order:i, ...m}));
+  MEDS_SEED_TARUN.forEach((m, i) => medsStore.setId(medSeedId("Tarun", m.name), {person:"Tarun", order:i, ...m}));
 }
 // Reads a med record in whichever shape it's actually stored in, without
 // mutating the store. Records created by the old inline-editable-table UI
