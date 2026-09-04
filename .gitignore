@@ -15,3 +15,11 @@ family-hub-backup-*.json
 # browser's downloads location is pointed at this folder. Contains the same
 # sensitive values as SETTINGS-CHEATSHEET.md, so it's git-ignored the same way.
 config/*.json
+
+# Home dashboard runtime config (Firebase RTDB URL, home location, LAN URLs) —
+# sensitive, same reasoning as SETTINGS-CHEATSHEET.md above.
+family-hub-config.json
+
+# Local data backups (chores/groceries/recipes + a stray index.html snapshot) —
+# real family data, this repo is public.
+backups/
