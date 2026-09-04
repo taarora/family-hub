@@ -248,6 +248,13 @@ function makeLocalStore(key){
     add(obj){ list = [...list, {id:uid(), ...obj}]; persist(); },
     update(id, patch){ list = list.map(x => x.id===id ? {...x, ...patch} : x); persist(); },
     remove(id){ list = list.filter(x => x.id!==id); persist(); },
+    // Idempotent upsert for a caller-chosen id, e.g. one-time seed data — two
+    // devices racing to seed the same fixed id converge on one row instead
+    // of each blindly inserting their own (see makeFirestoreStore's setId).
+    setId(id, obj){
+      list = list.some(x=>x.id===id) ? list.map(x=>x.id===id?{...x,...obj,id}:x) : [...list, {id, ...obj}];
+      persist();
+    },
     subscribe(fn){ subs.push(fn); fn(list); }
   };
 }
@@ -274,6 +281,13 @@ function makeFirestoreStore(collectionName){
     add(obj){ col.add({...obj, createdAt: Date.now()}); },
     update(id, patch){ col.doc(id).update(patch); },
     remove(id){ col.doc(id).delete(); },
+    // Idempotent upsert for a caller-chosen id. col.add() always mints a
+    // fresh random id, so two devices independently deciding "the list looks
+    // empty, let's seed" each insert their own full copy — this is exactly
+    // what happened to the Meds seed data (every row duplicated once, 2026-
+    // 09-03). set() on a fixed id instead converges to one document no
+    // matter how many times or how many devices call it.
+    setId(id, obj){ col.doc(id).set({...obj, createdAt: Date.now()}, {merge: true}); },
     subscribe(fn){ subs.push(fn); fn(list); }
   };
 }
@@ -287,6 +301,10 @@ let recipesStore = makeLocalStore("hub_recipes_local");
 let watchlistStore = makeLocalStore("hub_watchlist_local");
 // {id, person, name, units, timesPerDay, time, pushNotify, order}
 let medsStore = makeLocalStore("hub_meds_local");
+// Home dashboard's cycling photo frame. {id, dataUrl, createdAt} -- dataUrl is a
+// compressed JPEG data: URL, kept under Firestore's 1MiB document limit at upload
+// time (see compressImageFile / the upload handler below).
+let photosStore = makeLocalStore("hub_photos_local");
 
 // If this device ever operated in local-only mode (Firebase not configured,
 // or misconfigured) while items/recipes were added, those additions are
@@ -326,10 +344,12 @@ function initFirebase(){
     recipesStore = makeLocalStore("hub_recipes_local");
     watchlistStore = makeLocalStore("hub_watchlist_local");
     medsStore = makeLocalStore("hub_meds_local");
+    photosStore = makeLocalStore("hub_photos_local");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
     watchlistStore.subscribe(renderAllWatchlistViews);
     medsStore.subscribe(renderMeds);
+    photosStore.subscribe(renderAllPhotoViews);
     seedMedsIfNeeded();
     return;
   }
@@ -343,10 +363,12 @@ function initFirebase(){
     recipesStore = makeFirestoreStore("recipes");
     watchlistStore = makeFirestoreStore("watchlist");
     medsStore = makeFirestoreStore("meds");
+    photosStore = makeFirestoreStore("homePhotos");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
     watchlistStore.subscribe(renderAllWatchlistViews);
     medsStore.subscribe(renderMeds);
+    photosStore.subscribe(renderAllPhotoViews);
     dot.className = "statusdot ok";
     txt.textContent = "Connected — syncing live across devices";
     fbReady = true;
@@ -354,6 +376,7 @@ function initFirebase(){
     mergeLocalIntoFirestore("hub_recipes_local", "recipes", d=>(d.title||"").trim().toLowerCase());
     mergeLocalIntoFirestore("hub_watchlist_local", "watchlist", d=>(d.ticker||"").trim().toUpperCase());
     mergeLocalIntoFirestore("hub_meds_local", "meds", d=>((d.person||"")+"|"+(d.name||"")).trim().toLowerCase());
+    mergeLocalIntoFirestore("hub_photos_local", "homePhotos", d=>(d.dataUrl||"").slice(0,120));
   }catch(e){
     console.warn("Firebase init failed", e);
     dot.className = "statusdot bad";
@@ -362,10 +385,12 @@ function initFirebase(){
     recipesStore = makeLocalStore("hub_recipes_local");
     watchlistStore = makeLocalStore("hub_watchlist_local");
     medsStore = makeLocalStore("hub_meds_local");
+    photosStore = makeLocalStore("hub_photos_local");
     itemsStore.subscribe(renderAllListViews);
     recipesStore.subscribe(renderRecipes);
     watchlistStore.subscribe(renderAllWatchlistViews);
     medsStore.subscribe(renderMeds);
+    photosStore.subscribe(renderAllPhotoViews);
   }
   setTimeout(seedMedsIfNeeded, 1500);
 }
@@ -1064,6 +1089,7 @@ async function renderTradingEmbed(host, url, opts){
   const emptyMsg = o.emptyMsg || `No ${service} address set.`;
   const offMsg = o.offMsg || "Isn't reachable.";
   const compact = !!o.compact;
+  const linkOut = !!o.linkOut;
   const big = compact ? "" : `<div class="big">${icon}</div>`;
   if(!url){
     host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">${big}<div>${escapeHtml(emptyMsg)}</div>${compact?'':`<div class="hint">Add your ${escapeHtml(service)}'s network address in Settings.</div>`}</div>`;
@@ -1078,15 +1104,29 @@ async function renderTradingEmbed(host, url, opts){
       ${compact ? '<div class="big" style="font-size:22px;">🔒</div>' : '<div class="big">🔒</div>'}
       <div>Can't embed this here.</div>
       ${compact ? '' : `<div class="hint">This Hub loads securely (https), but your ${escapeHtml(service)} link is plain http (${escapeHtml(url)}) — browsers block mixing the two, even on your home Wi-Fi. Opening it in Safari works fine instead.</div>`}
-      <button class="btn ${compact?'ghost':'primary'} embed-open-ext" style="margin-top:6px;">Open in Safari ↗</button>
+      <a class="btn ${compact?'ghost':'primary'}" style="margin-top:6px; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open in Safari ↗</a>
     </div>`;
-    host.querySelector(".embed-open-ext").addEventListener("click", ()=>{ window.open(url, "_blank"); });
     return;
   }
   if(!compact) host.innerHTML = `<div class="ticker-off"><div class="big">⏳</div><div>Checking connection…</div></div>`;
   const ok = await reachable(url);
   if(!ok){
     host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">${compact?'':'<div class="big">📴</div>'}<div>${escapeHtml(offMsg)}</div>${compact?'':`<div class="hint">Make sure your Mac and ${escapeHtml(service)} are on, and this device is on the same Wi-Fi as ${escapeHtml(url)}.</div>`}</div>`;
+    return;
+  }
+  // Some embeds (Mealie) require a login, and a cross-origin iframe's session
+  // cookie is "third-party" to a browser even when the iframe's src is
+  // same-origin to itself -- Chrome blocks or drops it, so the login form
+  // posts successfully but the session never sticks. Linking out to a real
+  // tab sidesteps that entirely (the app becomes first-party to itself
+  // there), at the cost of leaving the kiosk view.
+  if(linkOut){
+    host.innerHTML = `<div class="ticker-off ${compact?'compact':''}">
+      ${big}
+      <div>${escapeHtml(service)} is ready.</div>
+      ${compact?'':`<div class="hint">Opens in its own tab so your login sticks — embedding it here loses the session every time (third-party cookies get blocked).</div>`}
+      <a class="btn ${compact?'ghost':'primary'}" style="margin-top:6px; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open ${escapeHtml(service)} ↗</a>
+    </div>`;
     return;
   }
   host.innerHTML = `<iframe class="trading-embed-frame" src="${escapeAttr(url)}"></iframe>`;
@@ -1101,7 +1141,7 @@ document.getElementById("tickerRetry").addEventListener("click", renderTicker);
 async function renderMealie(){
   const host = document.getElementById("mealieHost");
   const url = normalizeWallUrl(CFG.mealieUrl);
-  await renderTradingEmbed(host, url, {service:"Mealie", icon:"🍳", emptyMsg:"No Mealie address set.", offMsg:"Mealie isn't reachable."});
+  await renderTradingEmbed(host, url, {service:"Mealie", icon:"🍳", emptyMsg:"No Mealie address set.", offMsg:"Mealie isn't reachable.", linkOut:true});
 }
 document.getElementById("mealieRetry").addEventListener("click", renderMealie);
 
@@ -1140,12 +1180,13 @@ document.getElementById("watchlistInput").addEventListener("keydown", (e)=>{
 });
 
 /* ------------------------------------------------------------- 7c. MEDS */
-// Editable per-person medication tables. "Push Notify" is just a data flag
+// Medication tracker, one list per person. "Push Notify" is just a data flag
 // here (medsStore's pushNotify field) — actually delivering a phone push at
 // the scheduled time is a separate piece (reusing the trading project's
-// generic engine/push.py + launchd pattern), not yet wired up.
+// generic engine/push.py + launchd pattern), not yet wired up. "Due today" /
+// "taken today" is purely an in-app visual reminder for the same reason.
 const MEDS_PEOPLE = ["Tarun", "Ruchi"];
-const MEDS_CARD_CLASS = { Tarun: "mc-tarun", Ruchi: "mc-ruchi" };
+const MEDS_WEEKDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MEDS_SEED_TARUN = [
   {name:"Plavix",              units:"75 mg",    timesPerDay:"1",         time:"8:00 AM", pushNotify:true},
   {name:"Metformin ER",        units:"500 mg",   timesPerDay:"2",         time:"AM & PM", pushNotify:false},
@@ -1164,91 +1205,247 @@ const MEDS_SEED_TARUN = [
   {name:"Lantus",              units:"26 units", timesPerDay:"1",         time:"PM",      pushNotify:false},
 ];
 // Runs once ever (CFG.medsSeeded, a per-device localStorage flag — CFG itself
-// isn't synced). If Firestore is configured we're called again 1.5s after
-// initFirebase() so the real onSnapshot data has had a chance to arrive first
-// — without that delay, a second device's very first render (list still [])
-// would look empty and re-seed a duplicate copy into the shared collection.
+// isn't synced). Uses setId() with a deterministic per-medication id rather
+// than add(), which used to mint a fresh random id every call: if Firestore
+// hasn't synced yet on a second device, both it and the first device decide
+// "list looks empty, let's seed" and each called add() for all 15 rows,
+// producing 30 documents (every medication duplicated once, found and
+// cleaned up 2026-09-03). setId() on a fixed id converges to one document
+// no matter how many devices race to seed it or how many times this runs.
+function medSeedId(person, name){
+  return (person+"-"+name).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
+}
 function seedMedsIfNeeded(){
   if(CFG.medsSeeded) return;
   CFG.medsSeeded = true;
   saveCfg();
   if(medsStore.list.length) return; // already has data (synced) — just mark seeded, don't touch it
-  MEDS_SEED_TARUN.forEach((m, i) => medsStore.add({person:"Tarun", order:i, ...m}));
+  MEDS_SEED_TARUN.forEach((m, i) => medsStore.setId(medSeedId("Tarun", m.name), {person:"Tarun", order:i, ...m}));
 }
-function medTimeGroup(time, timesPerDay){
-  const tpd = (timesPerDay || "").toLowerCase();
-  if(tpd.includes("bi-wkly") || tpd.includes("biwkly") || tpd.includes("bi-weekly")) return "biweekly";
-  if(tpd.includes("wkly") || tpd.includes("weekly")) return "weekly";
-  const t = (time || "").toLowerCase();
-  const hasAm = t.includes("am"), hasPm = t.includes("pm");
-  if(hasAm && hasPm) return "both";
-  if(hasAm) return "am";
-  if(hasPm) return "pm";
-  return "other";
+// Reads a med record in whichever shape it's actually stored in, without
+// mutating the store. Records created by the old inline-editable-table UI
+// only ever have {units, timesPerDay, time} — `frequency` never being set is
+// exactly what marks a record as pre-dating this rebuild; a record the new
+// form saved always sets it explicitly (even to "daily"), so this check
+// never misfires on a genuinely new record.
+function normalizeMed(m){
+  if(m.frequency !== undefined){
+    return {
+      id: m.id, person: m.person, order: m.order ?? 0,
+      name: m.name || "", dosage: m.dosage ?? m.units ?? "", time: m.time || "",
+      frequency: m.frequency || "daily", days: m.days || [],
+      refillDate: m.refillDate || "", notes: m.notes || "",
+      pushNotify: !!m.pushNotify, lastTakenAt: m.lastTakenAt || null,
+    };
+  }
+  const tpd = (m.timesPerDay || "").toLowerCase();
+  const isBiweekly = tpd.includes("bi-wkly") || tpd.includes("biwkly") || tpd.includes("bi-weekly");
+  const isWeekly = !isBiweekly && (tpd.includes("wkly") || tpd.includes("weekly"));
+  let frequency = "daily", days = [], time = m.time || "";
+  if(isWeekly || isBiweekly){
+    frequency = "days";
+    // The old table's "time" column held a day abbreviation ("Sun") for
+    // these rows instead of a real time — that's the only place it lived.
+    const dayGuess = MEDS_WEEKDAYS.find(d => (m.time||"").toLowerCase().startsWith(d.toLowerCase()));
+    days = dayGuess ? [dayGuess] : [];
+    time = "";
+  }
+  return {
+    id: m.id, person: m.person, order: m.order ?? 0,
+    name: m.name || "", dosage: m.units || "", time,
+    frequency, days, refillDate: "", notes: isBiweekly ? "Every other week" : "",
+    pushNotify: !!m.pushNotify, lastTakenAt: null,
+  };
 }
-const MEDS_GROUP_LABEL = {am:"Morning", pm:"Evening", both:"Morning & evening", weekly:"Weekly", biweekly:"Every other week", other:"Other"};
-function medsRowHtml(m){
-  const grp = medTimeGroup(m.time, m.timesPerDay);
-  return `<tr class="meds-row" data-id="${m.id}">
-    <td class="mc-check"><div class="check meds-push ${m.pushNotify?'on':''}" data-id="${m.id}" role="checkbox" aria-checked="${!!m.pushNotify}" aria-label="Push notify for ${escapeHtml(m.name||'this medication')}">✓</div></td>
-    <td class="mc-name"><span class="meds-dot mg-${grp}" title="${MEDS_GROUP_LABEL[grp]}"></span><input class="meds-field" data-id="${m.id}" data-field="name" value="${escapeAttr(m.name||"")}" placeholder="Medication"></td>
-    <td><input class="meds-field" data-id="${m.id}" data-field="units" value="${escapeAttr(m.units||"")}" placeholder="—"></td>
-    <td><input class="meds-field" data-id="${m.id}" data-field="timesPerDay" value="${escapeAttr(m.timesPerDay||"")}" placeholder="—"></td>
-    <td><input class="meds-field" data-id="${m.id}" data-field="time" value="${escapeAttr(m.time||"")}" placeholder="—"></td>
-    <td class="mc-del"><button class="meds-del" data-id="${m.id}" aria-label="Remove ${escapeHtml(m.name||'medication')}">✕</button></td>
-  </tr>`;
+function medsTodayStr(){
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
-function medsPersonCardHtml(person){
-  const cls = MEDS_CARD_CLASS[person] || "mc-other";
-  const rows = medsStore.list.filter(m=>m.person===person).sort((a,b)=>(a.order??0)-(b.order??0));
-  return `<div class="card meds-card">
-    <div class="meds-card-head ${cls}"><span>${escapeHtml(person)} — Med List</span></div>
-    <div class="meds-card-body">
-      <table class="meds-table">
-        <thead><tr><th class="mc-check">Push</th><th>Meds List</th><th>Units</th><th title="Times per Day">TOD</th><th>Time</th><th class="mc-del"></th></tr></thead>
-        <tbody>${rows.length ? rows.map(medsRowHtml).join("") : `<tr><td colspan="6" class="empty">No medications yet.</td></tr>`}</tbody>
-      </table>
-      <div class="meds-addrow"><button class="btn ghost meds-add" data-person="${escapeAttr(person)}">+ Add medication</button></div>
+function medIsDueToday(nm){
+  if(nm.frequency === "days") return nm.days.includes(MEDS_WEEKDAYS[new Date().getDay()]);
+  return true; // daily
+}
+function medIsTakenToday(nm){
+  return nm.lastTakenAt === medsTodayStr();
+}
+function medFreqLabel(nm){
+  if(nm.frequency === "daily") return "Daily";
+  if(!nm.days.length) return "No days set";
+  if(nm.days.length === 7) return "Daily";
+  return nm.days.join(", ");
+}
+// Color-coded countdown: overdue (red) / due within 3 days (warn) / within a
+// week (accent) / anything further out just reads as a plain neutral badge.
+function medRefillInfo(refillDate){
+  if(!refillDate) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const rd = new Date(refillDate + "T00:00:00");
+  const days = Math.round((rd - today) / 86400000);
+  const cls = days < 0 ? "overdue" : days <= 3 ? "soon" : days <= 7 ? "upcoming" : "ok";
+  const label = days < 0 ? `Refill overdue ${-days}d` : days === 0 ? "Refill due today" : `Refill in ${days}d`;
+  return {days, cls, label};
+}
+
+let medsActivePerson = MEDS_PEOPLE[0];
+function renderMedsPersonSwitch(){
+  const host = document.getElementById("medsPersonSwitch");
+  if(!host) return;
+  host.innerHTML = MEDS_PEOPLE.map(p=>
+    `<button data-person="${escapeAttr(p)}" class="${p===medsActivePerson?'active':''}">${escapeHtml(p)}</button>`
+  ).join("");
+  host.querySelectorAll("button").forEach(b=>{
+    b.addEventListener("click", ()=>{ medsActivePerson = b.dataset.person; renderMeds(); });
+  });
+}
+function medCardHtml(nm){
+  const dueToday = medIsDueToday(nm);
+  const taken = medIsTakenToday(nm);
+  const refill = medRefillInfo(nm.refillDate);
+  const metaBits = [nm.dosage, nm.time, medFreqLabel(nm)].filter(Boolean);
+  return `<div class="med-card ${dueToday && !taken ? 'med-due' : ''} ${taken ? 'med-taken' : ''}" data-id="${nm.id}">
+    ${dueToday
+      ? `<button class="med-check ${taken?'on':''}" data-id="${nm.id}" aria-label="Mark ${escapeHtml(nm.name||'medication')} ${taken?'not taken':'taken'} today">✓</button>`
+      : `<div class="med-check-spacer"></div>`}
+    <div class="med-info">
+      <div class="med-name">${escapeHtml(nm.name || "(unnamed)")}</div>
+      <div class="med-meta">${escapeHtml(metaBits.join(" · "))}</div>
+      ${nm.notes ? `<div class="med-notes">${escapeHtml(nm.notes)}</div>` : ""}
+    </div>
+    <div class="med-badges">
+      ${refill ? `<span class="med-refill ${refill.cls}">${escapeHtml(refill.label)}</span>` : ""}
+      ${nm.pushNotify ? `<span class="med-push-badge" title="Push reminder on">🔔</span>` : ""}
     </div>
   </div>`;
 }
 function wireMedsEvents(host){
-  host.querySelectorAll(".meds-push").forEach(el=>{
-    el.addEventListener("click", ()=>{
+  host.querySelectorAll(".med-check").forEach(el=>{
+    el.addEventListener("click", (e)=>{
+      e.stopPropagation();
       const m = medsStore.list.find(x=>x.id===el.dataset.id);
       if(!m) return;
-      medsStore.update(el.dataset.id, {pushNotify: !m.pushNotify});
+      const taken = medIsTakenToday(normalizeMed(m));
+      medsStore.update(el.dataset.id, {lastTakenAt: taken ? null : medsTodayStr()});
     });
   });
-  host.querySelectorAll(".meds-field").forEach(el=>{
-    el.addEventListener("change", ()=>{
-      medsStore.update(el.dataset.id, {[el.dataset.field]: el.value});
-    });
+  host.querySelectorAll(".med-card").forEach(el=>{
+    el.addEventListener("click", ()=> openMedModal(el.dataset.id));
   });
-  host.querySelectorAll(".meds-del").forEach(el=>{
-    el.addEventListener("click", ()=>medsStore.remove(el.dataset.id));
-  });
-  host.querySelectorAll(".meds-add").forEach(el=>{
-    el.addEventListener("click", ()=>{
-      const person = el.dataset.person;
-      const existing = medsStore.list.filter(m=>m.person===person);
-      const order = existing.length ? Math.max(...existing.map(m=>m.order??0)) + 1 : 0;
-      medsStore.add({person, order, name:"", units:"", timesPerDay:"1", time:"", pushNotify:false});
-    });
-  });
+  document.getElementById("medsAddBtn")?.addEventListener("click", ()=> openMedModal(null));
 }
 function renderMeds(){
+  renderMedsPersonSwitch();
   const host = document.getElementById("medsBody");
   if(!host) return;
-  host.innerHTML = `<div class="meds-legend">
-      <span><span class="meds-dot mg-am"></span>Morning</span>
-      <span><span class="meds-dot mg-pm"></span>Evening</span>
-      <span><span class="meds-dot mg-both"></span>Morning &amp; evening</span>
-      <span><span class="meds-dot mg-weekly"></span>Weekly</span>
-      <span><span class="meds-dot mg-biweekly"></span>Every other week</span>
-    </div>` + MEDS_PEOPLE.map(medsPersonCardHtml).join("");
+  const all = medsStore.list.filter(m=>m.person===medsActivePerson).map(normalizeMed).sort((a,b)=>(a.order??0)-(b.order??0));
+  const due = all.filter(m=>medIsDueToday(m) && !medIsTakenToday(m));
+
+  host.innerHTML = `
+    ${due.length
+      ? `<div class="meds-summary due">⏰ <span class="n">${due.length}</span> medication${due.length===1?'':'s'} due today</div>`
+      : `<div class="meds-summary clear">✅ All caught up for today</div>`}
+    <div class="meds-section-title">All Medications</div>
+    <div class="meds-cards">${all.length ? all.map(medCardHtml).join("") : `<div class="empty">No medications yet for ${escapeHtml(medsActivePerson)}. Tap "+ Add Medication" to start.</div>`}</div>
+    <button class="btn primary meds-add-btn" id="medsAddBtn">+ Add Medication</button>
+  `;
   wireMedsEvents(host);
+  renderMedsPrintArea(all);
 }
+
+/* ------------------------------------------------------- 7d. MEDS MODAL */
+let editingMedId = null;
+let medFormDays = new Set();
+function renderMedDaysChips(){
+  const host = document.getElementById("medDaysChips");
+  host.innerHTML = MEDS_WEEKDAYS.map(d=>`<button type="button" class="chip-toggle ${medFormDays.has(d)?'on':''}" data-day="${d}">${d}</button>`).join("");
+  host.querySelectorAll("button").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      const d = b.dataset.day;
+      medFormDays.has(d) ? medFormDays.delete(d) : medFormDays.add(d);
+      b.classList.toggle("on");
+    });
+  });
+}
+function openMedModal(id){
+  editingMedId = id;
+  const raw = id ? medsStore.list.find(x=>x.id===id) : null;
+  const m = raw ? normalizeMed(raw) : null;
+  document.getElementById("medModalTitle").textContent = id ? "Edit Medication" : "New Medication";
+  document.getElementById("medName").value = m?.name || "";
+  document.getElementById("medDosage").value = m?.dosage || "";
+  document.getElementById("medTime").value = m?.time || "";
+  document.getElementById("medRefill").value = m?.refillDate || "";
+  document.getElementById("medNotes").value = m?.notes || "";
+  document.getElementById("medPushSwitch").classList.toggle("on", !!m?.pushNotify);
+  const freq = m?.frequency || "daily";
+  document.querySelectorAll("#medFreqSwitch button").forEach(b=>b.classList.toggle("active", b.dataset.freq===freq));
+  document.getElementById("medDaysField").style.display = freq === "days" ? "" : "none";
+  medFormDays = new Set(m?.days || []);
+  renderMedDaysChips();
+  document.getElementById("medDelete").style.display = id ? "" : "none";
+  document.getElementById("medModalBack").hidden = false;
+}
+document.querySelectorAll("#medFreqSwitch button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#medFreqSwitch button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById("medDaysField").style.display = b.dataset.freq === "days" ? "" : "none";
+  });
+});
+document.getElementById("medPushSwitch")?.addEventListener("click", (e)=>{ e.currentTarget.classList.toggle("on"); });
+document.getElementById("medCancel")?.addEventListener("click", ()=>{ document.getElementById("medModalBack").hidden = true; });
+document.getElementById("medSave")?.addEventListener("click", ()=>{
+  const name = document.getElementById("medName").value.trim();
+  if(!name){ toast("Enter a medication name"); return; }
+  const freq = document.querySelector("#medFreqSwitch button.active")?.dataset.freq || "daily";
+  const obj = {
+    person: medsActivePerson,
+    name,
+    dosage: document.getElementById("medDosage").value.trim(),
+    time: document.getElementById("medTime").value.trim(),
+    frequency: freq,
+    days: freq === "days" ? [...medFormDays] : [],
+    refillDate: document.getElementById("medRefill").value,
+    notes: document.getElementById("medNotes").value.trim(),
+    pushNotify: document.getElementById("medPushSwitch").classList.contains("on"),
+  };
+  if(editingMedId){
+    medsStore.update(editingMedId, obj);
+  }else{
+    const existing = medsStore.list.filter(m=>m.person===medsActivePerson);
+    const order = existing.length ? Math.max(...existing.map(m=>m.order??0)) + 1 : 0;
+    medsStore.add({...obj, order});
+  }
+  document.getElementById("medModalBack").hidden = true;
+  toast("Medication saved");
+});
+document.getElementById("medDelete")?.addEventListener("click", ()=>{
+  if(editingMedId) medsStore.remove(editingMedId);
+  document.getElementById("medModalBack").hidden = true;
+  toast("Medication removed");
+});
+
+/* ------------------------------------------------------- 7e. MEDS PRINT */
+function renderMedsPrintArea(all){
+  const host = document.getElementById("medsPrintArea");
+  if(!host) return;
+  const today = new Date().toLocaleDateString([], {weekday:"long", year:"numeric", month:"long", day:"numeric"});
+  host.innerHTML = `
+    <h2>${escapeHtml(medsActivePerson)} — Medication List</h2>
+    <div class="print-date">Printed ${escapeHtml(today)}</div>
+    <table>
+      <thead><tr><th>Medication</th><th>Dosage</th><th>Time</th><th>Frequency</th><th>Refill Date</th><th>Notes</th></tr></thead>
+      <tbody>${all.map(m=>`<tr>
+        <td>${escapeHtml(m.name)}</td>
+        <td>${escapeHtml(m.dosage)}</td>
+        <td>${escapeHtml(m.time)}</td>
+        <td>${escapeHtml(medFreqLabel(m))}</td>
+        <td>${m.refillDate ? escapeHtml(new Date(m.refillDate+"T00:00:00").toLocaleDateString()) : "—"}</td>
+        <td>${escapeHtml(m.notes)}</td>
+      </tr>`).join("")}</tbody>
+    </table>
+  `;
+}
+document.getElementById("medsPrint")?.addEventListener("click", ()=> window.print());
 
 /* ------------------------------------------------------------ 8. HOME --- */
 // Chores split into two buckets for the Home layout ("Appts scheduling" vs
@@ -1336,13 +1533,13 @@ function wireCheckboxes(root){
 let home2MonthCursor = new Date();
 let home2WeekCursor = new Date();
 const H2_MONTH_DOT_CAP = 4;
-// Home 2's Watchlist card fetches quotes from this Cloudflare Worker instead
-// Fetch quotes from local Trading server instead of external API (avoids CORS issues)
-// The Trading server has live market data via yfinance and serves it at /quote endpoint
-// Falls back to CORS-enabled Cloudflare Worker if Trading server unavailable
+// Home 2's Watchlist card gets its quotes from the trading server's /quotes/board
+// (Public.com primary, yfinance fallback for anything Public can't quote -- mutual
+// funds mainly, see market_data.quote_board() in the trading repo) since it's on the
+// same LAN and CORS-enabled for this origin. The Cloudflare Worker is a pure fallback
+// for whenever the trading server itself is off.
 const QUOTES_TRADING_SERVER = "http://10.0.0.159:5056";  // RPi Trading server
 const QUOTES_FALLBACK_URL = "https://family-hub-quotes.taarora-b77.workers.dev/";  // External fallback
-let QUOTES_WORKER_URL = QUOTES_TRADING_SERVER;  // Default to Trading server
 
 function renderH2Month(){
   const y = home2MonthCursor.getFullYear(), m = home2MonthCursor.getMonth();
@@ -1431,6 +1628,25 @@ function renderH2Weather(){
 }
 const num2 = (n, d=2) => n == null || Number.isNaN(n) ? "—" : Number(n).toFixed(d);
 const pctStr = n => n == null || Number.isNaN(n) ? "—" : (n>0?"+":"") + Number(n).toFixed(2) + "%";
+async function fetchQuotesFrom(url, ms){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), ms);
+  try{
+    const r = await fetch(url, {cache:"no-store", signal:ctrl.signal});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    return (await r.json()).quotes || {};
+  }finally{
+    clearTimeout(t);
+  }
+}
+async function fetchWatchlistQuotes(tickers){
+  const symbols = encodeURIComponent(tickers.join(","));
+  try{
+    return await fetchQuotesFrom(QUOTES_TRADING_SERVER + "/quotes/board?symbols=" + symbols, 6000);
+  }catch(e){
+    return await fetchQuotesFrom(QUOTES_FALLBACK_URL + "?symbols=" + symbols, 6000);
+  }
+}
 async function renderH2Watchlist(){
   const host = document.getElementById("h2WatchlistBody");
   if(!host) return;
@@ -1440,11 +1656,12 @@ async function renderH2Watchlist(){
     return;
   }
   let quotes = {};
-
-  // For now, just show watchlist tickers without live quotes
-  // (Quote APIs have CORS issues - will fix in Phase E)
-  // Watchlist functionality is working perfectly, just not showing prices
-  console.log("✓ Watchlist rendering (quote fetching disabled during Phase C testing)");
+  try{
+    quotes = await fetchWatchlistQuotes(tickers);
+  }catch(e){
+    host.innerHTML = `<div class="ticker-off compact"><div class="big" style="font-size:22px;">📴</div><div>Can't reach quotes right now.</div></div>`;
+    return;
+  }
   const rows = tickers.map(sym=>{
     const q = quotes[sym];
     const chgClass = !q || q.change_pct == null ? "qflat" : q.change_pct > 0 ? "qup" : q.change_pct < 0 ? "qdown" : "qflat";
@@ -1467,6 +1684,100 @@ document.getElementById("h2WatchlistRefresh")?.addEventListener("click", (e)=>{
   btn.disabled = true;
   renderH2Watchlist().finally(()=>{ btn.disabled = false; });
 });
+
+/* ------------------------------------------------------- 7d. HOME PHOTOS */
+let h2PhotoIdx = 0;
+function renderH2Photo(){
+  const host = document.getElementById("h2PhotoBody");
+  if(!host) return;
+  const photos = photosStore.list;
+  if(!photos.length){
+    host.innerHTML = `<div class="h2-photo-empty"><div class="big">🖼️</div><div>No photos yet.</div><div class="hint">Add some in Settings.</div></div>`;
+    return;
+  }
+  if(h2PhotoIdx >= photos.length) h2PhotoIdx = 0;
+  host.innerHTML = photos.map((p,i)=>`<img src="${escapeAttr(p.dataUrl)}" class="${i===h2PhotoIdx?'on':''}" alt="">`).join("");
+}
+// One shared interval, not per-render -- renderH2Photo() gets called often (every
+// list edit, every 15-min calendar refresh, every screen switch), so starting a
+// fresh timer each time would pile up duplicate intervals advancing the same index.
+setInterval(()=>{
+  const photos = photosStore.list;
+  if(photos.length < 2) return;
+  h2PhotoIdx = (h2PhotoIdx + 1) % photos.length;
+  const host = document.getElementById("h2PhotoBody");
+  if(!host) return;
+  host.querySelectorAll("img").forEach((img,i)=>img.classList.toggle("on", i===h2PhotoIdx));
+}, 12000);
+
+function renderPhotoThumbs(){
+  const host = document.getElementById("photoThumbs");
+  if(!host) return;
+  const list = photosStore.list;
+  host.innerHTML = list.length ? list.map(p=>`
+    <div class="photo-thumb" data-id="${p.id}">
+      <img src="${escapeAttr(p.dataUrl)}" alt="">
+      <button class="del" data-id="${p.id}" aria-label="Remove photo">✕</button>
+    </div>
+  `).join("") : `<div class="hint">No photos yet — add one above.</div>`;
+  host.querySelectorAll(".del").forEach(btn=>{
+    btn.addEventListener("click", ()=> photosStore.remove(btn.dataset.id));
+  });
+}
+function renderAllPhotoViews(){ renderPhotoThumbs(); if(currentScreen==="home2") renderH2Photo(); }
+
+// Downscales in a <canvas> and re-encodes as JPEG so an upload from a phone
+// camera (often 3-5MB) fits well under Firestore's 1MiB-per-document limit once
+// base64-encoded (~33% larger than the raw bytes). Backs off quality in 0.1 steps
+// if the first pass still comes out too big -- a busy photo compresses worse than
+// a plain one, so a single fixed quality isn't reliable across arbitrary photos.
+function compressImageFile(file, maxSide, quality){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const ratio = Math.min(maxSide/img.width, maxSide/img.height, 1);
+        const w = Math.max(1, Math.round(img.width*ratio)), h = Math.max(1, Math.round(img.height*ratio));
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = ()=>reject(new Error("Not a readable image"));
+      img.src = e.target.result;
+    };
+    reader.onerror = ()=>reject(new Error("Couldn't read file"));
+    reader.readAsDataURL(file);
+  });
+}
+async function handlePhotoUpload(){
+  const inp = document.getElementById("photoUploadInput");
+  const hint = document.getElementById("photoUploadHint");
+  const file = inp.files && inp.files[0];
+  if(!file){ hint.textContent = "Choose a photo first."; return; }
+  hint.textContent = "Compressing…";
+  const MAX_BYTES = 900000; // headroom under Firestore's 1MiB document cap
+  try{
+    let quality = 0.75;
+    let dataUrl = await compressImageFile(file, 1600, quality);
+    while(dataUrl.length > MAX_BYTES && quality > 0.3){
+      quality -= 0.1;
+      dataUrl = await compressImageFile(file, 1600, quality);
+    }
+    if(dataUrl.length > MAX_BYTES){
+      hint.textContent = "That photo is too large even compressed — try a smaller one.";
+      return;
+    }
+    photosStore.add({dataUrl});
+    inp.value = "";
+    hint.textContent = "Added.";
+    setTimeout(()=>{ if(hint.textContent === "Added.") hint.textContent = ""; }, 2500);
+  }catch(e){
+    hint.textContent = "Couldn't read that file.";
+  }
+}
+document.getElementById("photoUploadBtn")?.addEventListener("click", handlePhotoUpload);
 function renderHome2(){
   renderH2Month();
   renderH2Week();
@@ -1474,6 +1785,7 @@ function renderHome2(){
   renderH2Chores();
   renderH2Weather();
   renderH2Watchlist();
+  renderH2Photo();
 }
 document.getElementById("h2MonthPrev")?.addEventListener("click", ()=>{ home2MonthCursor = new Date(home2MonthCursor.getFullYear(), home2MonthCursor.getMonth()-1, 1); renderH2Month(); });
 document.getElementById("h2MonthNext")?.addEventListener("click", ()=>{ home2MonthCursor = new Date(home2MonthCursor.getFullYear(), home2MonthCursor.getMonth()+1, 1); renderH2Month(); });

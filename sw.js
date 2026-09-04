@@ -15,7 +15,7 @@
    actually show it). Bump CACHE's version suffix whenever this strategy or
    the SHELL list changes, so old cached entries get swept on activate. */
 
-const CACHE = "family-hub-shell-v2";
+const CACHE = "family-hub-shell-v3";
 const SHELL = ["./", "./index.html", "./app.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (evt) => {
@@ -35,7 +35,13 @@ self.addEventListener("fetch", (evt) => {
   if (!isShellFile) return; // let everything else (APIs, iframe, CDN scripts) go straight to the network
 
   evt.respondWith(
-    fetch(evt.request).then(resp => {
+    // {cache:"no-store"} is the actual fix here: fetch(evt.request) alone still lets
+    // the browser's own HTTP cache layer (underneath the service worker, driven by
+    // python http.server's Last-Modified/heuristic-freshness headers) silently answer
+    // without a real network round-trip -- which is indistinguishable from this
+    // "network-first" strategy quietly becoming "cache-first" the moment that layer
+    // decides a shell file still counts as fresh. no-store forces a genuine fetch.
+    fetch(evt.request, {cache: "no-store"}).then(resp => {
       caches.open(CACHE).then(c => c.put(evt.request, resp.clone()));
       return resp;
     }).catch(() => caches.match(evt.request))

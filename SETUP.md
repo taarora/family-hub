@@ -4,13 +4,15 @@ The app itself is done and works right away in "solo" mode (each device has its 
 
 Do these roughly in order. Budget about 20–30 minutes total, most of it Firebase.
 
-**Lost your settings?** (e.g. deleted the app to troubleshoot) — see `SETTINGS-CHEATSHEET.md` in this same folder before redoing all of this. It's not on GitHub on purpose (some of those values are effectively "anyone with this link can see your family's calendar/list data," so it stays local-only) — it lives only in this folder on your Mac. Back it up somewhere of your own (Notes, a password manager) so a lost laptop doesn't mean redoing Firebase too.
+**Lost your settings?** (e.g. deleted the app to troubleshoot) — see `SETTINGS-CHEATSHEET.md` in this same folder before redoing all of this. It's not on GitHub on purpose (some of those values are effectively "anyone with this link can see your family's calendar/list data," so it stays local-only) — it lives only in this folder on whichever machine you're working from. Back it up somewhere of your own (Notes, a password manager) so losing that machine doesn't mean redoing Firebase too.
+
+**As of 2026-09-02, the Raspberry Pi (`10.0.0.159`) is the 24/7 primary** for family-hub itself, the trading server, and Mealie. The Mac Studio is cold backup only — most of the IP/path references below now point at the Pi, not the Mac.
 
 ---
 
 ## 0. Quick tour
 
-- **Home** — a 4-column dashboard, each card a different accent color (never red/green, so it's clear at a glance regardless of color vision): **Monthly** mini-calendar + **Week** view (colored by event category, same coloring as the Calendar tab); three **Groceries** cards, one per store (Wegmans, Indian, Costco); **Weather — Weekly** strip + **Chores — Appointments** + **Chores — Household**; and **Markets Watchlist** (live quotes, refresh button, 52-week-high column — see section 5, this card works even when your Mac/trading server is off).
+- **Home** — a 4-column dashboard, each card a different accent color (never red/green, so it's clear at a glance regardless of color vision): **Monthly** mini-calendar + **Week** view (colored by event category, same coloring as the Calendar tab); three **Groceries** cards, one per store (Wegmans, Indian, Costco); **Weather — Weekly** strip + **Chores — Appointments** + **Chores — Household**; **Markets Watchlist** (live quotes, refresh button, 52-week-high column — see section 5c, still shows something even when the trading server is off thanks to a fallback quote source); and a small **cycling photo frame** below the Watchlist card (add/remove photos in Settings → Home Photos).
 - **Lists screen** — two tabs: **Chores** (flat checklist, add at the top) and **Grocery** (four columns — Indian, Wegmans, Trader Joe's, Costco — each with its own add box, so items file straight into the right store).
 - **Meds** — editable medication lists, one card per person (Tarun's list is pre-filled; add Ruchi's or anyone else's with "+ Add medication"). Each row has a color dot for time-of-day (Morning/Evening/Morning & evening/Weekly/Every other week — legend at the top), editable Name/Units/TOD (times per day)/Time fields, and a Push checkbox to flag a medication for phone-push reminders later (checked by default on your critical meds — currently Plavix and Aspirin; actual push delivery isn't wired up yet). On iPhone the Push and delete columns are hidden to keep it readable — do the checkbox/delete edits from an iPad or the Mac where there's more room; the fields themselves are always editable everywhere.
 - Everything else (Calendar, Weather, Markets, Recipes, Settings) is as described below.
@@ -108,25 +110,25 @@ Blue travel, green photography, red doctor, orange friends — done by matching 
 
 There are two different market-data spots in the Hub now, with two different dependencies:
 
-- **Home's "Markets Watchlist" card** — a short list of tickers you pick (Settings → Markets → add tickers), showing last price, change, and 52-week-high. This pulls live quotes from a small Cloudflare Worker (`family-hub-quotes.taarora-b77.workers.dev`), not from your Mac — it works whether or not the Mac/trading server is on. Has its own refresh button (⟳) on the card, and also auto-refreshes every 60 seconds while Home is on screen. If the Worker itself ever needs updating (e.g. Yahoo Finance changes its response shape), that's edited in the Cloudflare dashboard, not in this repo.
-- **The Markets tab** (full ticker heatmap) — this is still your existing trading project's `web/wall.html`, running its own local server on your Mac at port 5056. The Hub just opens that as a screen — it can't run without your Mac and the trading server being on, since that's where the live price data comes from. That's an inherent tradeoff of reusing it rather than rebuilding a separate live-data pipeline.
+- **Home's "Markets Watchlist" card** — a short list of tickers you pick (Settings → Markets → add tickers), showing last price, change, and 52-week-high. As of 2026-09-02 this pulls primarily from the trading server's own `/quotes/board` endpoint (Public.com for stocks/ETFs, yfinance as the automatic fallback for anything Public can't quote — mainly mutual funds), falling back to a small Cloudflare Worker (`family-hub-quotes.taarora-b77.workers.dev`) only if the trading server itself is unreachable. Has its own refresh button (⟳) on the card, and also auto-refreshes every 60 seconds while Home is on screen. See section 5c below for both sources.
+- **The Markets tab** (full ticker heatmap) — this is still the trading project's `web/wall.html`, running its own local server at port 5056. The Hub just opens that as a screen — it can't run without the trading server being on, since that's where the live price data comes from. That's an inherent tradeoff of reusing it rather than rebuilding a separate live-data pipeline.
 
-1. On your Mac, start the trading app's server as usual (the one that serves `wall.html` on port 5056).
-2. Find your Mac's local IP (**System Settings → Wi-Fi → Details** → look for an address like `192.168.1.xx`).
-3. In the Hub → **Settings → Markets / Ticker Wall** → enter `http://192.168.1.xx:5056/wall.html` (your actual IP) → Save.
-4. The Markets tab now shows it live whenever your Mac + server are on and your other device is on the same Wi-Fi. If not reachable, it shows a clear "offline" message instead of a blank screen.
+1. Start the trading app's server — on the RPi, `~/start-trading-server.sh` (sources `~/.secrets/trading.env` with `set -a` so Public.com's API key actually gets exported to the process — a plain `source` without that silently leaves it unset).
+2. Find the server's local IP: on the RPi, run `hostname -I` or `ip addr` in a terminal (look for the wired `eth0` address, not `wlan0` — the Pi has both, and everything's configured to use the wired one). On a Mac it'd be System Settings → Wi-Fi → Details instead.
+3. In the Hub → **Settings → Markets / Ticker Wall** → enter `http://<that IP>:5056/wall.html` → Save. (Currently `http://10.0.0.159:5056/wall.html`.)
+4. The Markets tab now shows it live whenever the RPi + trading server are on and your other device is on the same Wi-Fi. If not reachable, it shows a clear "offline" message instead of a blank screen.
 5. Weekends: the Markets tab is hidden from navigation and rotation automatically (toggle this in Settings if you ever want it back).
 
-**Heads up if the Hub is installed from the GitHub Pages URL** (the recommended path in step 1): that URL loads over `https`, but your trading server is plain `http`. Browsers block a secure page from embedding an insecure one ("mixed content") — it's not a reachability issue and retrying won't fix it, so the Markets tab instead shows an **"Open Markets in Safari"** button that hands off to a normal browser tab, where it loads fine. If you ever want it truly embedded in-app instead, the trading server would need to run over `https` too (a self-signed cert trusted on each device) — ask if you want help setting that up.
+**Heads up if the Hub is ever loaded over `https`** (e.g. a GitHub Pages URL): the trading server is plain `http`, and browsers block a secure page from embedding an insecure one ("mixed content") — it's not a reachability issue and retrying won't fix it, so the Markets tab instead shows an **"Open in Safari"** button that hands off to a normal browser tab, where it loads fine. If you ever want it truly embedded in-app instead, the trading server would need to run over `https` too (a self-signed cert trusted on each device) — ask if you want help setting that up.
 
 ---
 
 ## 5b. Recipes / Mealie (self-hosted recipe manager)
 
-**Installed and configured as of 2026-08-30** — Mealie (https://github.com/mealie-recipes/mealie) is a free, self-hosted recipe manager/meal planner with URL import, meal planning, and shopping lists, running on the Mac. Same tradeoff as Markets above: it runs on your Mac, so the Recipes tab can only reach it while your Mac + Mealie are on and the device is on the same Wi-Fi. Steps below are for reference / setting it up again elsewhere.
+**Installed 2026-08-30, migrated from the Mac to the RPi on 2026-09-02** — Mealie (https://github.com/mealie-recipes/mealie) is a free, self-hosted recipe manager/meal planner with URL import, meal planning, and shopping lists, now running on the RPi. Same tradeoff as Markets above: the Recipes tab can only reach it while the RPi + Mealie are on and the device is on the same Wi-Fi. Steps below are for reference / setting it up again elsewhere.
 
-1. Install Docker Desktop on your Mac if you don't have it already.
-2. The compose file already lives at `~/Documents/Claude/Code/repos/mealie/docker-compose.yml` (a sibling folder to this repo — not part of family-hub itself, so it never gets committed/pushed here):
+1. Install Docker. On the RPi (Debian-based, no GUI): `curl -fsSL https://get.docker.com | sudo sh` then `sudo usermod -aG docker <your-user>` (log out/in, or use `sg docker -c "..."`, for the group change to take effect without a reboot). On a Mac it'd be Docker Desktop instead.
+2. The compose file lives at `~/Documents/Claude/Code/repos/mealie/docker-compose.yml` (a sibling folder to this repo — not part of family-hub itself, so it never gets committed/pushed here):
    ```yaml
    services:
      mealie:
@@ -150,21 +152,24 @@ There are two different market-data spots in the Hub now, with two different dep
    volumes:
      mealie-data:
    ```
-3. From that folder, run `docker compose up -d`. Visit `http://localhost:9925` on the Mac to finish the one-time account setup.
-4. Find your Mac's local IP (**System Settings → Wi-Fi → Details**, e.g. `192.168.1.xx`) — same IP as the trading server if it's the same Mac.
-5. In the Hub → **Settings → Recipes / Mealie** → enter `http://192.168.1.xx:9925` → Save.
-6. The Recipes tab now embeds the real Mealie site (search, meal planner, shopping lists) whenever the Mac + Mealie are on and the device is on the same Wi-Fi. Your existing "Quick Notes" recipe cards below it are untouched — that's the Hub's own separate, always-available list, not replaced by Mealie.
-7. Same mixed-content caveat as Markets: since the Hub loads over `https` and Mealie is plain `http`, the tab shows an **"Open in Safari"** button instead of a true embed — this is a browser security rule, not a bug.
+3. From that folder, run `docker compose up -d`. Visit `http://localhost:9925` to finish the one-time account setup (or restore a backup from an existing instance — see the migration note below).
+4. Find the server's local IP the same way as the trading server above (`hostname -I` / `ip addr` on the RPi, wired `eth0` address).
+5. In the Hub → **Settings → Recipes / Mealie** → enter `http://<that IP>:9925` → Save. (Currently `http://10.0.0.159:9925`.)
+6. **Not embedded in the Recipes tab.** Mealie needs a login, and a cross-origin iframe's session cookie gets blocked by Chrome as "third-party" even when the iframe's own origin matches Mealie's — the login form would post successfully but the session would never stick, so the tab instead shows an **Open Mealie ↗** button that opens it in its own tab, where login works normally. This is unrelated to the mixed-content issue Markets has (it happens over plain `http` too) — it's specifically about third-party cookies in an iframe. Your existing "Quick Notes" recipe cards on the Recipes tab are untouched either way — that's the Hub's own separate, always-available list, not replaced by Mealie.
+
+**Migrating an existing Mealie instance to a new machine**: Mealie's admin API has everything needed and it's fully scriptable — no need to touch either machine's filesystem directly. From the old instance, log in → your user's **API Tokens** → create one. Then: `POST /api/admin/backups` (creates a backup server-side) → `GET /api/admin/backups/{file_name}` (returns a short-lived `fileToken`) → `GET /api/utils/download?token=<fileToken>` (the actual zip bytes — the backups endpoint itself only ever returns that token, not the file). On the new instance, get a session token via `POST /api/auth/token` (its default first-run login if fresh — Mealie shows `changeme@example.com` / `MyPassword` right on its own login page until you log in and change it), then `POST /api/admin/backups/upload` (multipart, field name `archive`) followed by `POST /api/admin/backups/{file_name}/restore`. A full restore replaces the entire database, so the real account/password from the old instance comes through intact and the temporary `changeme` account disappears. Revoke the API token afterward (`DELETE /api/users/api-tokens/{id}`) since it's long-lived by default.
 
 **Later, if you want recipes to work away from home Wi-Fi too**: this would mean exposing Mealie through a tunnel (e.g. Cloudflare Tunnel, same account as the Markets quotes Worker) and building a small proxy so the Hub can pull recipe data directly and render native cards instead of embedding Mealie's UI. Bigger lift — ask if/when you want to go there.
 
 ---
 
-## 5c. Cloudflare Worker (powers the Markets Watchlist card's live quotes)
+## 5c. Markets Watchlist quotes — trading server (primary) + Cloudflare Worker (fallback)
 
-Home's "Markets Watchlist" card gets its prices from a small Cloudflare Worker, `family-hub-quotes.taarora-b77.workers.dev` (Cloudflare account: `Taarora@yahoo.com's Account`), which proxies Yahoo Finance's chart endpoint and returns last price, change, and 52-week-high for whatever tickers the Hub asks for. This is separate from — and doesn't need — your Mac or the trading server.
+**Primary, as of 2026-09-02:** the trading server's own `/quotes/board?symbols=...` endpoint (hardcoded in `app.js` as `QUOTES_TRADING_SERVER`), same host as the Markets tab's `wall.html` in section 5. It's backed by `market_data.quote_board()` in the trading project: Public.com is the quote source for stocks/ETFs (real broker bid/ask/last, no key needed beyond the account already configured there), and yfinance is the automatic fallback for anything Public can't quote — mainly mutual funds (5-letter tickers ending in X, like VTSAX), since Public's brokerage has no mutual fund coverage at all. Also backfills 52-week-high via yfinance, since Public's quote response doesn't carry that field.
 
-You won't normally need to touch this; it's here for reference if the Worker ever needs updating (e.g. Yahoo changes its response format and quotes stop showing):
+**Fallback**, used only if the trading server itself is unreachable: a small Cloudflare Worker, `family-hub-quotes.taarora-b77.workers.dev` (hardcoded as `QUOTES_FALLBACK_URL`; Cloudflare account: `Taarora@yahoo.com's Account`), which proxies Yahoo Finance's chart endpoint. This is separate from — and doesn't need — the RPi or the trading server, so it's what keeps the Watchlist card alive if the trading server is ever down.
+
+You won't normally need to touch the Worker; it's here for reference if it ever needs updating (e.g. Yahoo changes its response format and the fallback stops working):
 
 1. Go to the Cloudflare dashboard → **Workers & Pages** → `family-hub-quotes`.
 2. Open the code editor (paste new code directly into the Monaco editor there — it can't be typed in via browser automation, has to be pasted by hand).
