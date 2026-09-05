@@ -6,7 +6,7 @@ Do these roughly in order. Budget about 20–30 minutes total, most of it Fireba
 
 **Lost your settings?** (e.g. deleted the app to troubleshoot) — see `SETTINGS-CHEATSHEET.md` in this same folder before redoing all of this. It's not on GitHub on purpose (some of those values are effectively "anyone with this link can see your family's calendar/list data," so it stays local-only) — it lives only in this folder on whichever machine you're working from. Back it up somewhere of your own (Notes, a password manager) so losing that machine doesn't mean redoing Firebase too.
 
-**As of 2026-09-02, the Raspberry Pi (`10.0.0.159`) is the 24/7 primary** for family-hub itself, the trading server, and Mealie. The Mac Studio is cold backup only — most of the IP/path references below now point at the Pi, not the Mac.
+**As of 2026-09-05, the MacBook Air `tamba` (`arorat-mba@10.0.0.195`) is the 24/7 primary** for family-hub, the trading server and Mealie. Reach it over Tailscale HTTPS — `https://taruns-macbook-air.tail1ee8a6.ts.net` (trading), `:8443` (this app), `:8445` (Mealie) — not by LAN IP: the service worker only registers over HTTPS, and the Markets and Recipes iframes are mixed-content blocked otherwise. The Mac Studio is now a development machine and runs no services. The Raspberry Pi has been retired.
 
 ---
 
