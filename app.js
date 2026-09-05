@@ -27,6 +27,7 @@ const DEFAULTS = {
   rtdbUrl: "",
   wallUrl: "",
   mealieUrl: "",
+  quotesUrl: "",
   medsSeeded: false,
   weather: { lat:null, lon:null, label:"" },
   keywords: {
@@ -1538,7 +1539,12 @@ const H2_MONTH_DOT_CAP = 4;
 // funds mainly, see market_data.quote_board() in the trading repo) since it's on the
 // same LAN and CORS-enabled for this origin. The Cloudflare Worker is a pure fallback
 // for whenever the trading server itself is off.
-const QUOTES_TRADING_SERVER = "http://10.0.0.159:5056";  // RPi Trading server
+// Fallback only. The real value comes from CFG.quotesUrl (Settings), because
+// this was hardcoded to one machine's LAN IP: off-LAN every watchlist refresh
+// stalled the full 6s timeout before dropping to the Cloudflare worker, and a
+// server move meant editing source. Left non-empty so an unconfigured install
+// still behaves as before.
+const QUOTES_TRADING_SERVER = "http://10.0.0.159:5056";  // legacy default
 const QUOTES_FALLBACK_URL = "https://family-hub-quotes.taarora-b77.workers.dev/";  // External fallback
 
 function renderH2Month(){
@@ -1642,7 +1648,8 @@ async function fetchQuotesFrom(url, ms){
 async function fetchWatchlistQuotes(tickers){
   const symbols = encodeURIComponent(tickers.join(","));
   try{
-    return await fetchQuotesFrom(QUOTES_TRADING_SERVER + "/quotes/board?symbols=" + symbols, 6000);
+    const base = (CFG.quotesUrl || QUOTES_TRADING_SERVER).replace(/\/+$/, "");
+    return await fetchQuotesFrom(base + "/quotes/board?symbols=" + symbols, 6000);
   }catch(e){
     return await fetchQuotesFrom(QUOTES_FALLBACK_URL + "?symbols=" + symbols, 6000);
   }
