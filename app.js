@@ -1544,7 +1544,7 @@ const H2_MONTH_DOT_CAP = 4;
 // stalled the full 6s timeout before dropping to the Cloudflare worker, and a
 // server move meant editing source. Left non-empty so an unconfigured install
 // still behaves as before.
-const QUOTES_TRADING_SERVER = "http://10.0.0.159:5056";  // legacy default
+const QUOTES_TRADING_SERVER = "https://taruns-macbook-air.tail1ee8a6.ts.net";  // fallback if CFG.quotesUrl is unset
 const QUOTES_FALLBACK_URL = "https://family-hub-quotes.taarora-b77.workers.dev/";  // External fallback
 
 function renderH2Month(){
